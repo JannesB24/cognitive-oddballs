@@ -53,5 +53,3 @@ ruff check --fix .
 ### Configuration
 
 Ruff is configured in `pyproject.toml` or `ruff.toml` at the project root.
-
-
