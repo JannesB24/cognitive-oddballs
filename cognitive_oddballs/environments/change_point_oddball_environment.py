@@ -47,7 +47,7 @@ def generate_oddball_environment(
 
     np.random.seed(seed)  # reproducibility
 
-    # Initialize DataFrame with trial numbers
+    # Initialize DataFrame
     df = pd.DataFrame({"trial": range(n_trials)})
 
     # Initialize columns
@@ -57,16 +57,17 @@ def generate_oddball_environment(
     df["is_oddball"] = False  # track oddball trials
     df["is_change_point"] = False  # track change point trials
 
-    # Initialize helicopter in center of range
+    # Initialize first trial
     df.loc[0, "mu"] = BAG_MAX_POS / 2  # Start at center
     df.loc[0, "x"] = np.random.normal(df.loc[0, "mu"], sigma)  # initial bag drop location
 
     # Generate trials
     for t in range(1, n_trials):
         # Change point decision: does helicopter change position?
-        # Allow change point only after 5 trials without one
+
         recent_cp = [df.loc[i, "is_change_point"] for i in range(max(0, t - 5), t)]
 
+        # Allow change point only after 5 trials without one
         if np.random.rand() < change_point_hazard_rate and not any(recent_cp):
             # Change Point: change to a new helicopter position within bounds
             new_mu = np.random.uniform(helicopter_min, helicopter_max + 1)

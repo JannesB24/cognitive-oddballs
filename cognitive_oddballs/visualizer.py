@@ -28,7 +28,7 @@ def visualize_environment(df: pd.DataFrame, delay: float = 2.0, width: int = 80)
         print("\033[2J\033[H", end="")  # Clear screen, move cursor to top
 
         print("=" * width)
-        print(f"🎮 HELICOPTER BAG DROP SIMULATION")
+        print("🎮 HELICOPTER BAG DROP SIMULATION")
         print("=" * width)
         print(f"Trial: {trial:3d} | Helicopter: {mu:6.1f} | Bag: {x:6.1f}")
 
