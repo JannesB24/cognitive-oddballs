@@ -17,6 +17,12 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
+## Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
 ## Code Quality with Ruff
 
 This project uses [Ruff](https://docs.astral.sh/ruff/) for linting and code formatting.
