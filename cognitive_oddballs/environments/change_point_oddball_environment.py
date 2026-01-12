@@ -8,7 +8,7 @@ BAG_MAX_POS = 500
 def generate_oddball_environment(
     n_trials=400,
     oddball_hazard_rate=0.1,
-    sigma=20,
+    sigma=25,
     change_point_hazard_rate=0.1,
     seed=555,
 ) -> pd.DataFrame:
