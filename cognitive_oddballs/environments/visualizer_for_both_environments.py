@@ -94,9 +94,10 @@ def visualize_summary(df: pd.DataFrame):
     print("📊 SIMULATION SUMMARY")
     print("=" * 60)
     print(f"Total trials:        {len(df)}")
-    print(
-        f"Change points:       {df['is_change_point'].sum()} ({df['is_change_point'].mean() * 100:.1f}%)"
-    )
+    if "is_change_point" in df.columns:
+        print(
+            f"Change points:       {df['is_change_point'].sum()} ({df['is_change_point'].mean() * 100:.1f}%)"
+        )
     print(f"Oddball trials:      {df['is_oddball'].sum()} ({df['is_oddball'].mean() * 100:.1f}%)")
     print(f"\nHelicopter position: {df['mu'].min():.1f} - {df['mu'].max():.1f}")
     print(f"Bag drop position:   {df['x'].min():.1f} - {df['x'].max():.1f}")
