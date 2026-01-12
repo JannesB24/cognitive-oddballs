@@ -8,8 +8,8 @@ BAG_MAX_POS = 500
 def generate_random_walk_environment(
     n_trials=400,
     oddball_hazard_rate=0.1,
-    sigma=20,
-    drift_sigma=5, # standard deviation of random-walk drift, 5 because medium step sizes -> smooth continuous drift
+    sigma=25,
+    drift_sigma=10, # standard deviation of random-walk drift, 5 because medium step sizes -> smooth continuous drift
     seed=555,
 ) -> pd.DataFrame:
     """
