@@ -11,6 +11,7 @@ def visualize_environment(df: pd.DataFrame, max_pos: int, delay: float = 2.0, wi
 
     Args:
         df: DataFrame from generate_oddball_environment
+        max_pos: Maximum position value for representation
         delay: Delay between frames in seconds (0 for no delay)
         width: Width of the visualization bar
     """
