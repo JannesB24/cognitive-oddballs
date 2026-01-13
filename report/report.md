@@ -9,11 +9,13 @@ In addition, at random intervals an oddball bag will fall, which is sampled from
 
 ### Common environmental features
 
-The width of the environment is sampled at 501 ($x \in [0, 500]$) positions, which are allowed bag positions. The helicopter is located is more restricted between $3 * \sigma$ and $500 - 3 * \sigma$ to avoid edge effects, where $\sigma$ is the standard deviation of the observation noise. 
+The width of the environment is sampled at 501 ($x \in [0, 500]$) positions, which are allowed bag positions. The helicopter is located is more restricted between $3 * \sigma$ and $500 - 3 * \sigma$ to avoid edge effects, where $\sigma$ is the standard deviation of the observation noise. The helicopter starts out in the center.
 
 ### Change-point environment
 
-
+In each of the $n$ trials an oddball is generated with a certain *oddball hazard rate*. The oddball is sampled from a uniform distribution within bounds. Also possible in each trial is a change of the helicopter location (change point) a *change point hazard rate*, but not if one happened within the last five trials. If the bag drop location is not determined by the oddball, then the location is sampled from a gaussian distribution around the (to the observer unknown) helicopter location with a standard deviation of *sigma*.
 
 
 ### Gaussian random walk environment
+
+TODO
