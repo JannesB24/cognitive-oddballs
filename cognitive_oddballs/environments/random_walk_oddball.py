@@ -1,21 +1,23 @@
 import numpy as np
 import pandas as pd
+from visualizer import visualize_environment, visualize_summary
 
 BAG_MIN_POS = 0
 BAG_MAX_POS = 500
 
 
-def generate_oddball_environment(
+def generate_random_walk_environment(
     n_trials=400,
     oddball_hazard_rate=0.1,
     sigma=25,
-    change_point_hazard_rate=0.1,
+    drift_sigma=10,  # medium step sizes
     seed=555,
 ) -> pd.DataFrame:
     """
-    Generate true helicopter and observed bag positions for oddball condition:
-        - Helicopter changes position with a certain probability
-            each trial (change_point_hazard_rate)
+    Generate true helicopter and observed bag positions for an oddball environment with
+    RANDOM-WALK.
+        - Helicopter moves according to a Gaussian random walk
+            each trial (drift_sigma)
         - Occasional oddball bag drops (oddball_hazard_rate)
         - Static noise level (sigma) throughout all trials
 
@@ -23,11 +25,18 @@ def generate_oddball_environment(
         to avoid edge effects (The rest is clipped).
     The bag can be dropped anywhere in [0, 500] with respect to oddballs and noise.
 
+    Helicopter:
+        mu_t = mu_{t-1} + epsilon,   epsilon ~ N(0, drift_sigma)
+
+    Bag:
+        - Normal trials: x ~ N(mu_t, sigma)
+        - Oddball trials: x ~ Uniform(0, 500)
+
     Args:
         n_trials (int): Number of trials to simulate
         oddball_hazard_rate (float): Probability of an oddball bag drop on each trial
         sigma (float): Standard deviation of noise for bag drops from helicopter
-        change_point_hazard_rate (float): Probability of helicopter changing position on each trial
+        drift_sigma (float): Standard deviation of random-walk drift
         seed (int): Random seed for reproducibility
 
     Returns:
@@ -37,7 +46,7 @@ def generate_oddball_environment(
             - x: Observed bag drop positions for each trial
             - sigma: Noise levels for each trial (constant in this case)
             - is_oddball: Boolean indicating which trials are oddballs
-            - is_change_point: Boolean indicating which trials are change points
+            - drift: Random-walk drift step for each trial
 
     Usage:
         Read from 'x' column for each trial and check 'is_oddball' to see if it's an oddball trial.
@@ -47,7 +56,7 @@ def generate_oddball_environment(
 
     np.random.seed(seed)  # reproducibility
 
-    # Initialize DataFrame
+    # Initialize DataFrame with trial numbers
     df = pd.DataFrame({"trial": range(n_trials)})
 
     # Initialize columns
@@ -55,34 +64,26 @@ def generate_oddball_environment(
     df["x"] = 0.0  # observed bag drops
     df["sigma"] = sigma  # noise level (constant)
     df["is_oddball"] = False  # track oddball trials
-    df["is_change_point"] = False  # track change point trials
+    df["drift"] = 0.0  # track random-walk drift steps
 
-    # Initialize first trial
+    # Initialize helicopter in center of range
     df.loc[0, "mu"] = BAG_MAX_POS / 2  # Start at center
     df.loc[0, "x"] = np.random.normal(df.loc[0, "mu"], sigma)  # initial bag drop location
 
     # Generate trials
     for t in range(1, n_trials):
-        # Change point decision: does helicopter change position?
+        # Random walk drift
+        drift_step = np.random.normal(0, drift_sigma)
+        df.loc[t, "drift"] = drift_step
 
-        recent_cp = [df.loc[i, "is_change_point"] for i in range(max(0, t - 5), t)]
-
-        # Allow change point only after 5 trials without one
-        if np.random.rand() < change_point_hazard_rate and not any(recent_cp):
-            # Change Point: change to a new helicopter position within bounds
-            new_mu = np.random.uniform(helicopter_min, helicopter_max + 1)
-            df.loc[t, "mu"] = np.clip(new_mu, helicopter_min, helicopter_max)
-            df.loc[t, "is_change_point"] = True
-        else:
-            # No Change Point: maintain previous position
-            df.loc[t, "mu"] = df.loc[t - 1, "mu"]
+        # New helicopter position with clipping to avoid edges
+        new_mu = df.loc[t - 1, "mu"] + drift_step
+        df.loc[t, "mu"] = np.clip(new_mu, helicopter_min, helicopter_max)
 
         # Oddball decision: bag from random location or helicopter location?
         if np.random.rand() < oddball_hazard_rate:
             # Oddball: bag from uniform distribution (anywhere on screen)
-            new_x = np.random.uniform(
-                BAG_MIN_POS, BAG_MAX_POS + 1
-            )  # drawing float up to 500.99[...]
+            new_x = np.random.uniform(BAG_MIN_POS, BAG_MAX_POS + 1)
             df.loc[t, "x"] = np.clip(new_x, BAG_MIN_POS, BAG_MAX_POS)
             df.loc[t, "is_oddball"] = True
         else:
@@ -91,3 +92,20 @@ def generate_oddball_environment(
             df.loc[t, "x"] = np.clip(df.loc[t, "x"], BAG_MIN_POS, BAG_MAX_POS)
 
     return df
+
+
+if __name__ == "__main__":
+    # Generate environment
+    df = generate_random_walk_environment(
+        n_trials=50,
+        oddball_hazard_rate=0.15,
+        sigma=20,
+        drift_sigma=5,
+        seed=42,
+    )
+
+    # Visualize
+    visualize_environment(df, max_pos=BAG_MAX_POS, delay=2.0)
+
+    # Show summary
+    visualize_summary(df)
