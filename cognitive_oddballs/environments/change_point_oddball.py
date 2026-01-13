@@ -6,7 +6,7 @@ BAG_MIN_POS = 0
 BAG_MAX_POS = 500
 
 
-def generate_oddball_environment(
+def generate_change_point_environment(
     n_trials=400,
     oddball_hazard_rate=0.1,
     sigma=25,
@@ -96,7 +96,7 @@ def generate_oddball_environment(
 
 if __name__ == "__main__":
     # Generate environment
-    df = generate_oddball_environment(
+    df = generate_change_point_environment(
         n_trials=50, oddball_hazard_rate=0.15, sigma=20, change_point_hazard_rate=0.1, seed=42
     )
 
