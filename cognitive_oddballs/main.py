@@ -1,7 +1,7 @@
 from environments.change_point_oddball_environment import generate_oddball_environment
 from visualizer import visualize_environment, visualize_summary
 
-
+from models.change_point_nassar_model import ChangePointNassarModel
 def main():
     """Main entry point."""
     # Generate environment
@@ -14,6 +14,10 @@ def main():
 
     # Show summary
     visualize_summary(df)
+
+    nassar_model = ChangePointNassarModel(X=df['x'], sigma_sequence=df['sigma'], true_position=df['mu'] )
+    normative_model_results = nassar_model.run()
+    print(normative_model_results)
 
 
 if __name__ == "__main__":
