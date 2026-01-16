@@ -15,7 +15,7 @@ def main():
 
     # Visualize
     visualize_environment(df, delay=2.0)
-    
+
     # Show summary
     visualize_summary(df)
 
