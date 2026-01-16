@@ -9,98 +9,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-
-# Spec Functions
-
-def prediction_error(X_t, B_t):
-    """
-    Calculate prediction error (surprise magnitude).
-    
-    Args:
-        X_t: Observed outcome at trial t
-        B_t: Belief (bucket placement) at trial t
-    
-    Returns:
-        Prediction error δ_t
-    """
-    return X_t - B_t
-
-
-def relative_uncertainty(sig_mu, sig_N):
-    """
-    Calculate relative uncertainty (learning rate component).
-    
-    τ_{t+1} = σ_μ² / (σ_μ² + σ_N²)
-    
-    Args:
-        sig_mu: Standard deviation of predicted distribution over helicopter locations
-        sig_N: Standard deviation of noise distribution
-    
-    Returns:
-        Relative uncertainty τ
-    """
-    return sig_mu**2 / (sig_mu**2 + sig_N**2)
-
-
-def predictive_variance(Omega_t, sigma_N, tau_t, delta_t):
-    """
-    Calculate predictive variance (estimation uncertainty).
-    
-    σ_μ² = Ω_t * σ_N² + (1 - Ω_t) * σ_N² * τ_t + Ω_t * (1 - Ω_t) * δ_t * (1 - τ_t)
-    
-    Args:
-        Omega_t: Change-point probability at trial t
-        sigma_N: Standard deviation of noise
-        tau_t: Relative uncertainty at trial t
-        delta_t: Prediction error at trial t
-    
-    Returns:
-        Predictive variance σ_μ²
-    """
-    sigma_mu_sq = (
-        Omega_t * (sigma_N ** 2)
-        + (1 - Omega_t) * (sigma_N ** 2) * tau_t
-        + Omega_t * (1 - Omega_t) * delta_t * (1 - tau_t)
-    )
-    return sigma_mu_sq
-
-
-def learning_rate(omega_t1, tau_t1):
-    """
-    Calculate learning rate from change-point probability and uncertainty.
-    
-    α_t = Ω_t + τ_t * (1 - Ω_t)
-    
-    Args:
-        omega_t1: Change-point probability at trial t+1
-        tau_t1: Relative uncertainty at trial t+1
-    
-    Returns:
-        Learning rate α_t
-    """
-    return omega_t1 + (1 - omega_t1) * tau_t1
-
-
-def update_belief(B_t, alpha_t1, delta_t):
-    """
-    Update belief using delta rule.
-    
-    B_{t+1} = B_t + α_t * δ_t
-    
-    Args:
-        B_t: Current belief at trial t
-        alpha_t1: Learning rate at trial t+1
-        delta_t: Prediction error at trial t
-    
-    Returns:
-        Updated belief B_{t+1}
-    """
-    return B_t + alpha_t1 * delta_t
-
-
-# Normative Model Class
-
-class NormativeBaseModel:
+# Normative Model Class 
+class ChangePointNassarModel:
     """
     Normative Bayesian learning model from Nassar et al. (2016).
     
@@ -156,6 +66,94 @@ class NormativeBaseModel:
         Returns:
             Updated belief value
         """
+        # Spec Functions
+
+        def prediction_error(X_t, B_t):
+            """
+            Calculate prediction error (surprise magnitude).
+            
+            Args:
+                X_t: Observed outcome at trial t
+                B_t: Belief (bucket placement) at trial t
+            
+            Returns:
+                Prediction error δ_t
+            """
+            return X_t - B_t
+
+
+        def relative_uncertainty(sig_mu, sig_N):
+            """
+            Calculate relative uncertainty (learning rate component).
+            
+            τ_{t+1} = σ_μ² / (σ_μ² + σ_N²)
+            
+            Args:
+                sig_mu: Standard deviation of predicted distribution over helicopter locations
+                sig_N: Standard deviation of noise distribution
+            
+            Returns:
+                Relative uncertainty τ
+            """
+            return sig_mu**2 / (sig_mu**2 + sig_N**2)
+
+
+        def predictive_variance(Omega_t, sigma_N, tau_t, delta_t):
+            """
+            Calculate predictive variance (estimation uncertainty).
+            
+            σ_μ² = Ω_t * σ_N² + (1 - Ω_t) * σ_N² * τ_t + Ω_t * (1 - Ω_t) * δ_t * (1 - τ_t)
+            
+            Args:
+                Omega_t: Change-point probability at trial t
+                sigma_N: Standard deviation of noise
+                tau_t: Relative uncertainty at trial t
+                delta_t: Prediction error at trial t
+            
+            Returns:
+                Predictive variance σ_μ²
+            """
+            sigma_mu_sq = (
+                Omega_t * (sigma_N ** 2)
+                + (1 - Omega_t) * (sigma_N ** 2) * tau_t
+                + Omega_t * (1 - Omega_t) * delta_t * (1 - tau_t)
+            )
+            return sigma_mu_sq
+
+
+        def learning_rate(omega_t1, tau_t1):
+            """
+            Calculate learning rate from change-point probability and uncertainty.
+            
+            α_t = Ω_t + τ_t * (1 - Ω_t)
+            
+            Args:
+                omega_t1: Change-point probability at trial t+1
+                tau_t1: Relative uncertainty at trial t+1
+            
+            Returns:
+                Learning rate α_t
+            """
+            return omega_t1 + (1 - omega_t1) * tau_t1
+
+
+        def update_belief(B_t, alpha_t1, delta_t):
+            """
+            Update belief using delta rule.
+            
+            B_{t+1} = B_t + α_t * δ_t
+            
+            Args:
+                B_t: Current belief at trial t
+                alpha_t1: Learning rate at trial t+1
+                delta_t: Prediction error at trial t
+            
+            Returns:
+                Updated belief B_{t+1}
+            """
+            return B_t + alpha_t1 * delta_t
+
+
         # Get current trial's noise level
         self.sigma_n = self.sigma_sequence[t]
         self.sigma_n_squared = self.sigma_sequence[t] ** 2
@@ -271,5 +269,3 @@ class NormativeBaseModel:
             df.insert(1, "TruePosition", mu)
         
         return df
-    
-    
