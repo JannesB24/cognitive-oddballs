@@ -10,7 +10,8 @@ Models:
 - Two variants per model type
 
 Evaluation inspired by:
-- Nassar et al. (2010, 2022)
+- Nassar et al. (2010, 2016, 2019)
+- Razmi and  Nassar (2022)
 - Foucault et al. (2025)
 """
 
