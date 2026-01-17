@@ -1,11 +1,7 @@
 import pyhgf
 from pyhgf.model import Network
-from pyhgf.plots.matplotlib import plot_nodes
-from pyhgf.plots.matplotlib import plot_trajectories
-import pandas as pd
 
-
-class Weber_model():
+class Weber_model(Network):
     """An example of a generalized Hierarchichal Gaussian Filter, using a set structure"""
     network = 0
     def __init__(self):
@@ -15,27 +11,28 @@ class Weber_model():
         .add_nodes(value_children=0, node_parameters={"mean":250})
         .add_nodes(volatility_children=1)
         .add_nodes(volatility_children=0)
-        .add_nodes(volatility_children=3)
+        .add_nodes(volatility_children=3, node_parameters={"precision":3}) # jump from precison 3 to 4 made it give up earlier in random walk environment
         )
-  
-#currently gives no output and I'm not sure why <- run in interactive window -> still no graph
-    def show_graph(self):
-        """Plots the network structure of the model"""
-        #plot_nodes(self.network,[0,1,2,3,4])
-        #testing why it might not work
-        print("test") # call in test file works, but graph is not shown
-        print(self.network) # there is an actual network object created within the test file
+  # precision 3 seems to be the sweet spot so far, such that the first 500 trials can be predicted and are shown in graph (more trials still not working)
+  # -> dicotomy between two environments with random walk environment giving up earlier with higher preciscion
 
-#plotting in the interactive window -> now unsure why plot_network isn't working
-# model just seems to give up after the third input 
+
+    def plot_network(self):
+        """Plots the network structure of the model"""
+        self.network.plot_network()
+        #currently gives no output and I'm not sure why <- run in interactive window -> still no graph
+        
+
+
     def plot_trajectories(self):
         """plotting the trajectories of the different network nodes"""
-        pyhgf.plots.matplotlib.plot_trajectories(self.network)    
+        self.network.plot_trajectories() 
+        #plotting in the interactive window 
 
 # both fitting functions currently the same, but should maybe stay separate for usability
     def fit_to_change_point_oddball_environment(self, df):
         """Fitting the gHGF to a given dataset, produced in a change-point oddball environment"""
-       #seems to be working so far, at least no error message, but not clear as long as the graph doesn't work
+       
         input = df["x"].to_numpy()
         self.network.input_data(input)
 
@@ -44,5 +41,3 @@ class Weber_model():
         input = df["x"].to_numpy()
 
         self.network.input_data(input)
-
-    
