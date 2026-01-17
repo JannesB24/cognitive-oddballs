@@ -1,11 +1,12 @@
 import numpy as np
 import pandas as pd
+from visualizer import visualize_environment, visualize_summary
 
 BAG_MIN_POS = 0
 BAG_MAX_POS = 500
 
 
-def generate_oddball_environment(
+def generate_change_point_environment(
     n_trials=400,
     oddball_hazard_rate=0.1,
     sigma=25,
@@ -91,3 +92,16 @@ def generate_oddball_environment(
             df.loc[t, "x"] = np.clip(df.loc[t, "x"], BAG_MIN_POS, BAG_MAX_POS)
 
     return df
+
+
+if __name__ == "__main__":
+    # Generate environment
+    df = generate_change_point_environment(
+        n_trials=50, oddball_hazard_rate=0.15, sigma=20, change_point_hazard_rate=0.1, seed=42
+    )
+
+    # Visualize
+    visualize_environment(df, max_pos=BAG_MAX_POS, delay=2.0)
+
+    # Show summary
+    visualize_summary(df)
