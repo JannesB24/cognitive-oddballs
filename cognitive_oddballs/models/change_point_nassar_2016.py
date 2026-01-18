@@ -27,7 +27,7 @@ class ChangePointNassarModel:
         h: Hazard rate (prior probability of change point), default=0.1
     """
 
-    def __init__(self, x, sigma_sequence, h=0.1):
+    def __init__(self, x, sigma_sequence, h=0.1, uncertainty_scale=1.0):
         # Store inputs
         self.x = x
         self.sigma_sequence = sigma_sequence
@@ -35,6 +35,7 @@ class ChangePointNassarModel:
 
         # Model parameters
         self.hazard_rate = h
+        self.uncertainty_scale = uncertainty_scale
 
         # Initial belief
         self.initial_belief = x[0]
@@ -59,122 +60,125 @@ class ChangePointNassarModel:
         }
 
     def update(self, t):
-        """
-        Update belief for trial t.
-
-        Args:
-            t: Trial index
-
-        Returns:
-            Updated belief value
-        """
-        # Spec Functions
-
-        def prediction_error(x_t, b_t):
             """
-            Calculate prediction error (surprise magnitude).
-            Args:
-                x_t: Observed outcome at trial t
-                b_t: Belief (bucket placement) at trial t
-            Returns:
-                Prediction error δ_t
-            """
-            return x_t - b_t
-
-        def relative_uncertainty(sig_mu, sig_n):
-            """
-            Calculate relative uncertainty (learning rate component).
-
-            τ_{t+1} = σ_μ² / (σ_μ² + σ_N²)
+            Update belief for trial t.
 
             Args:
-                sig_mu: Standard deviation of predicted distribution over helicopter locations
-                sig_n: Standard deviation of noise distribution
-            Returns:
-                Relative uncertainty τ
-            """
-            return sig_mu**2 / (sig_mu**2 + sig_n**2)
-
-        def predictive_variance(omega_t, sigma_n, tau_t, delta_t):
-            """
-            Calculate predictive variance (estimation uncertainty).
-
-            σ_μ² = Ω_t * σ_N² + (1 - Ω_t) * σ_N² * τ_t + Ω_t * (1 - Ω_t) * δ_t * (1 - τ_t)
-
-            Args:
-                omega_t: Change-point probability at trial t
-                sigma_n: Standard deviation of noise
-                tau_t: Relative uncertainty at trial t
-                delta_t: Prediction error at trial t
+                t: Trial index
 
             Returns:
-                Predictive variance σ_μ²
+                Updated belief value
             """
-            sigma_mu_sq = (
-                omega_t * (sigma_n**2)
-                + (1 - omega_t) * (sigma_n**2) * tau_t
-                + omega_t * (1 - omega_t) * delta_t * (1 - tau_t)
-            )
-            return sigma_mu_sq
+            # Spec Functions
 
-        def learning_rate(omega_t1, tau_t1):
-            """
-            Calculate learning rate from change-point probability and uncertainty.
+            def prediction_error(x_t, b_t):
+                """
+                Calculate prediction error (surprise magnitude).
+                Args:
+                    x_t: Observed outcome at trial t
+                    b_t: Belief (bucket placement) at trial t
+                Returns:
+                    Prediction error δ_t
+                """
+                return x_t - b_t
 
-            α_t = Ω_t + τ_t * (1 - Ω_t)
+            def relative_uncertainty(sig_mu, sig_n):
+                """
+                Calculate relative uncertainty (learning rate component).
 
-            Args:
-                omega_t1: Change-point probability at trial t+1
-                tau_t1: Relative uncertainty at trial t+1
+                τ_{t+1} = σ_μ² / (σ_μ² + σ_N²)
 
-            Returns:
-                Learning rate α_t
-            """
-            return omega_t1 + (1 - omega_t1) * tau_t1
+                Args:
+                    sig_mu: Standard deviation of predicted distribution over helicopter locations
+                    sig_n: Standard deviation of noise distribution
+                Returns:
+                    Relative uncertainty τ
+                """
+                return sig_mu**2 / (sig_mu**2 + sig_n**2)
 
-        def update_belief(b_t, alpha_t1, delta_t):
-            """
-            Update belief using delta rule.
+            def predictive_variance(omega_t, sigma_n, tau_t, delta_t):
+                """
+                Calculate predictive variance (estimation uncertainty).
 
-            B_{t+1} = b_t + α_t * δ_t
+                σ_μ² = Ω_t * σ_N² + (1 - Ω_t) * σ_N² * τ_t + Ω_t * (1 - Ω_t) * δ_t * (1 - τ_t)
 
-            Args:
-                b_t: Current belief at trial t
-                alpha_t1: Learning rate at trial t+1
-                delta_t: Prediction error at trial t
+                Args:
+                    omega_t: Change-point probability at trial t
+                    sigma_n: Standard deviation of noise
+                    tau_t: Relative uncertainty at trial t
+                    delta_t: Prediction error at trial t
 
-            Returns:
-                Updated belief B_{t+1}
-            """
-            return b_t + alpha_t1 * delta_t
+                Returns:
+                    Predictive variance σ_μ²
+                """
+                sigma_mu_sq = (
+                    omega_t * (sigma_n**2)
+                    + (1 - omega_t) * (sigma_n**2) * tau_t
+                    + omega_t * (1 - omega_t) * delta_t * (1 - tau_t)
+                )
+                return sigma_mu_sq
 
-        # Get current trial's noise level
-        self.sigma_n = self.sigma_sequence[t]
-        self.sigma_n_squared = self.sigma_sequence[t] ** 2
+            def learning_rate(omega_t1, tau_t1):
+                """
+                Calculate learning rate from change-point probability and uncertainty.
 
-        # 1. Prediction error
-        delta = prediction_error(self.x[t], self.belief)
+                α_t = Ω_t + τ_t * (1 - Ω_t)
 
-        # 2. Change-point probability
-        omega = self._compute_change_point_prob(delta)
+                Args:
+                    omega_t1: Change-point probability at trial t+1
+                    tau_t1: Relative uncertainty at trial t+1
 
-        # 3. Predictive variance
-        sig_mu_sq = predictive_variance(omega, self.sigma_n, self.tau, delta)
+                Returns:
+                    Learning rate α_t
+                """
+                return omega_t1 + (1 - omega_t1) * tau_t1
 
-        # 4. Update relative uncertainty
-        self.tau = relative_uncertainty(np.sqrt(sig_mu_sq), self.sigma_n)
+            def update_belief(b_t, alpha_t1, delta_t):
+                """
+                Update belief using delta rule.
 
-        # 5. Learning rate
-        self.alpha = learning_rate(omega, self.tau)
+                B_{t+1} = b_t + α_t * δ_t
 
-        # 6. Update belief
-        self.belief = update_belief(self.belief, self.alpha, delta)
-        self.belief = np.clip(self.belief, 0, 500)  # Clip to valid range
+                Args:
+                    b_t: Current belief at trial t
+                    alpha_t1: Learning rate at trial t+1
+                    delta_t: Prediction error at trial t
 
-        # 7. Store history
-        self._store_history(delta, omega)
+                Returns:
+                    Updated belief B_{t+1}
+                """
+                return b_t + alpha_t1 * delta_t
 
-        return self.belief
+            # Get current trial's noise level
+            self.sigma_n = self.sigma_sequence[t]
+            self.sigma_n_squared = self.sigma_sequence[t] ** 2
+
+            # 1. Prediction error
+            delta = prediction_error(self.x[t], self.belief)
+
+            # 2. Change-point probability
+            omega = self._compute_change_point_prob(delta)
+
+            # 3. Predictive variance
+            sig_mu_sq = predictive_variance(omega, self.sigma_n, self.tau, delta)
+
+            # 4. Apply uncertainty scaling (for flexible model variants)
+            sig_mu_sq /= self.uncertainty_scale
+
+            # 5. Update relative uncertainty
+            self.tau = relative_uncertainty(np.sqrt(sig_mu_sq), self.sigma_n)
+
+            # 6. Learning rate
+            self.alpha = learning_rate(omega, self.tau)
+
+            # 7. Update belief
+            self.belief = update_belief(self.belief, self.alpha, delta)
+            self.belief = np.clip(self.belief, 0, 500)  # Clip to valid range
+
+            # 8. Store history
+            self._store_history(delta, omega)
+
+            return self.belief
 
     def _compute_change_point_prob(self, delta):
         """
