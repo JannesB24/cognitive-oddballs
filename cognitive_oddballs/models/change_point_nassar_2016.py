@@ -266,88 +266,110 @@ class ChangePointNassarModel:
 
         return df
     
-    def plot_results(self, results_df, noise_switch_trial=None, zoom_start=180, zoom_end=220):
+    def plot_results(self, results_df, env_df=None, noise_switch_trial=None, zoom_start=180, zoom_end=220):
         """
         Create visualization of model performance.
-        
+
         Args:
             results_df: DataFrame from run() method
+            env_df: Optional environment DataFrame with 'is_oddball' column
             noise_switch_trial: Trial number where noise switches (optional, for shading)
             zoom_start: Start trial for zoom-in plot
             zoom_end: End trial for zoom-in plot
         """
         plt.figure(figsize=(14, 10))
-        
+    
         # Plot 1: Trial vs Screen Position
         plt.subplot(3, 1, 1)
-        
+
         # Plot true position if available
         if 'TruePosition' in results_df.columns:
             plt.plot(results_df['Trial'], results_df['TruePosition'], 
                     'k--', label='True Helicopter', linewidth=2)
-        
+
         # Plot model belief
         plt.plot(results_df['Trial'], results_df['Belief'], 
                 'b-', label='Model Belief', linewidth=2)
-        
+    
+        # Mark oddball trials if environment data provided
+        if env_df is not None and 'is_oddball' in env_df.columns:
+            oddball_trials = env_df[env_df['is_oddball']]['trial'] + 1  # +1 because Trial starts at 1
+            oddball_beliefs = results_df[results_df['Trial'].isin(oddball_trials)]['Belief']
+            plt.scatter(oddball_trials, oddball_beliefs, 
+                    color='red', s=100, marker='x', linewidths=3,
+                    label='Oddball Trials', zorder=5)
+    
         # Add noise shading if switch point provided
         if noise_switch_trial is not None:
             plt.axvspan(0, noise_switch_trial, color='green', alpha=0.1, label='Low Noise')
             plt.axvspan(noise_switch_trial, len(results_df), color='red', alpha=0.1, label='High Noise')
-        
+    
         plt.ylabel("Position (0-500)")
         plt.title("Belief vs True Helicopter Position")
         plt.legend()
         plt.grid(True, alpha=0.3)
-        
+    
         # Plot 2: Surprise and Uncertainty
         plt.subplot(3, 1, 2)
         plt.plot(results_df['Trial'], results_df['PredictionError'], 
                 color='orange', label='Surprise (δ)', linewidth=1.5)
         plt.plot(results_df['Trial'], results_df['RelUncertainty'], 
                 color='purple', label='Relative Uncertainty (τ)', linewidth=1.5)
-        
+    
+        # Mark oddball trials
+        if env_df is not None and 'is_oddball' in env_df.columns:
+            for trial in oddball_trials:
+                plt.axvline(trial, color='red', linestyle=':', alpha=0.3, linewidth=1)
+    
         # Add noise shading if switch point provided
         if noise_switch_trial is not None:
             plt.axvspan(0, noise_switch_trial, color='green', alpha=0.1)
             plt.axvspan(noise_switch_trial, len(results_df), color='red', alpha=0.1)
-        
+    
         plt.ylabel("Model Estimates")
         plt.xlabel("Trial")
         plt.title("Surprise and Relative Uncertainty per Trial")
         plt.legend()
         plt.grid(True, alpha=0.3)
-        
+    
         # Plot 3: Zoom-in
         plt.subplot(3, 1, 3)
-        
+    
         # Get zoom data
         zoom_mask = (results_df['Trial'] >= zoom_start) & (results_df['Trial'] <= zoom_end)
         trials_zoom = results_df['Trial'][zoom_mask]
-        
+    
         # Normalize for visual clarity
         pred_error_zoom = np.abs(results_df['PredictionError'][zoom_mask])
         pred_error_norm = pred_error_zoom / np.max(pred_error_zoom) if np.max(pred_error_zoom) > 0 else pred_error_zoom
-        
+    
         rel_unc_zoom = results_df['RelUncertainty'][zoom_mask]
         rel_unc_norm = rel_unc_zoom / np.max(rel_unc_zoom) if np.max(rel_unc_zoom) > 0 else rel_unc_zoom
-        
+    
         plt.plot(trials_zoom, pred_error_norm, color='orange', 
                 label='Surprise (δ, normalized)', linewidth=2)
         plt.plot(trials_zoom, rel_unc_norm, color='purple', 
                 label='Relative Uncertainty (τ, normalized)', linewidth=2)
-        
+    
+        # Mark oddball trials in zoom
+        if env_df is not None and 'is_oddball' in env_df.columns:
+            zoom_oddballs = [t for t in oddball_trials if zoom_start <= t <= zoom_end]
+            for trial in zoom_oddballs:
+                plt.axvline(trial, color='red', linestyle=':', alpha=0.5, linewidth=2)
+    
         # Add noise shading if switch point provided
         if noise_switch_trial is not None:
             if zoom_start < noise_switch_trial < zoom_end:
                 plt.axvspan(zoom_start, noise_switch_trial, color='green', alpha=0.1, label='Low Noise')
                 plt.axvspan(noise_switch_trial, zoom_end, color='red', alpha=0.1, label='High Noise')
-        
+    
         plt.ylabel("Normalized Values (0-1)")
         plt.xlabel("Trial")
         plt.title(f"Zoom-in: Surprise and Relative Uncertainty (Trials {zoom_start}-{zoom_end})")
         plt.legend()
         plt.grid(True, alpha=0.3)
-        
+    
         plt.tight_layout()
         plt.show()
+
+    
