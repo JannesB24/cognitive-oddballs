@@ -3,25 +3,26 @@
 import time
 
 import pandas as pd
+from environments.change_point_oddball_environment import BAG_MAX_POS
 
 
-def visualize_environment(df: pd.DataFrame, max_pos: int, delay: float = 2.0, width: int = 80):
+def visualize_environment(df: pd.DataFrame, delay: float = 2.0, width: int = 80):
     """
     Visualize the helicopter environment in terminal.
 
     Args:
         df: DataFrame from generate_oddball_environment
-        max_pos: Maximum position value for representation
         delay: Delay between frames in seconds (0 for no delay)
         width: Width of the visualization bar
     """
+    max_pos = BAG_MAX_POS
+
     for _, row in df.iterrows():
         trial = int(row["trial"])
         mu = row["mu"]
         x = row["x"]
         is_oddball = row["is_oddball"]
-        is_change_point = row.get("is_change_point", False)
-        drift = row.get("drift", 0.0)
+        is_change_point = row["is_change_point"]
 
         # Clear screen and show header
         print("\033[2J\033[H", end="")  # Clear screen, move cursor to top
@@ -39,9 +40,6 @@ def visualize_environment(df: pd.DataFrame, max_pos: int, delay: float = 2.0, wi
             status.append("⚠️  ODDBALL")
         if not status:
             status.append("✓ Normal drop")
-        if abs(drift) > 0:
-            status.append(f"↔ drift={drift:+.1f}")
-
         print(f"Status: {' | '.join(status)}")
         print("-" * width)
 
@@ -91,11 +89,9 @@ def visualize_summary(df: pd.DataFrame):
     print("📊 SIMULATION SUMMARY")
     print("=" * 60)
     print(f"Total trials:        {len(df)}")
-    if "is_change_point" in df.columns:
-        print(
-            "Change points:       "
-            f"{df['is_change_point'].sum()} ({df['is_change_point'].mean() * 100:.1f}%)"
-        )
+    print(
+        f"Change points:       {df['is_change_point'].sum()} ({df['is_change_point'].mean() * 100:.1f}%)"
+    )
     print(f"Oddball trials:      {df['is_oddball'].sum()} ({df['is_oddball'].mean() * 100:.1f}%)")
     print(f"\nHelicopter position: {df['mu'].min():.1f} - {df['mu'].max():.1f}")
     print(f"Bag drop position:   {df['x'].min():.1f} - {df['x'].max():.1f}")
