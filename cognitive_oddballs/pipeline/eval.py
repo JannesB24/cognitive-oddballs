@@ -18,42 +18,32 @@ Evaluation inspired by:
 
 # Imports
 
+from collections.abc import Callable
+from pathlib import Path
 
-import os
-import json
-import numpy as np
 import matplotlib.pyplot as plt
-from typing import Dict, Callable
-
+import numpy as np
 
 # External imports (existing)
-
-
-from environments import (
-    generate_change_point_environment,
-    generate_random_walk_environment
-)
+from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
+from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
 
 # from models.model_type_a import model_a_v1, model_a_v2
 # from models.model_type_b import model_b_v1, model_b_v2
 
 
 # Paths
+PROJECT_ROOT = Path(__file__).parent
+RESULTS_DIR = PROJECT_ROOT / "results"
+FIGURES_DIR = RESULTS_DIR / "figures"
 
-
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-RESULTS_DIR = os.path.join(PROJECT_ROOT, "results")
-FIGURES_DIR = os.path.join(RESULTS_DIR, "figures")
-
-os.makedirs(FIGURES_DIR, exist_ok=True)
-
+FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
 # Utilities
 
 
 def set_seed(seed: int = 42):
     np.random.seed(seed)
-
 
 
 # Evaluation metrics
@@ -75,14 +65,11 @@ def compute_apparent_learning_rate(updates, prediction_errors):
     return lr
 
 
-def evaluate_outputs(outputs: Dict) -> Dict:
+def evaluate_outputs(outputs: dict) -> dict:
     """
     Compute model-agnostic metrics.
     """
-    lr = compute_apparent_learning_rate(
-        outputs["updates"],
-        outputs["prediction_errors"]
-    )
+    lr = compute_apparent_learning_rate(outputs["updates"], outputs["prediction_errors"])
 
     return {
         "learning_rate": lr,
@@ -92,14 +79,10 @@ def evaluate_outputs(outputs: Dict) -> Dict:
     }
 
 
-
 # Core simulation loop
 
 
-def run_model_on_environment(
-    model_fn: Callable,
-    observations: np.ndarray
-) -> Dict:
+def run_model_on_environment(model_fn: Callable, observations: np.ndarray) -> dict:
     """
     Runs a single model on a fixed observation sequence.
 
@@ -129,16 +112,12 @@ def run_model_on_environment(
     return evaluate_outputs(outputs)
 
 
-
 # Experiment runner
 
 
 def run_experiment(
-    environment_fn: Callable,
-    models: Dict[str, Callable],
-    n_trials: int,
-    experiment_name: str
-) -> Dict:
+    environment_fn: Callable, models: dict[str, Callable], n_trials: int, experiment_name: str
+) -> dict:
     """
     Run all models on a single environment.
     """
@@ -148,13 +127,9 @@ def run_experiment(
     results = {}
 
     for model_name, model_fn in models.items():
-        results[model_name] = run_model_on_environment(
-            model_fn,
-            observations
-        )
+        results[model_name] = run_model_on_environment(model_fn, observations)
 
     return results
-
 
 
 # Experiment 1:
@@ -177,7 +152,6 @@ def experiment_changepoint():
     )
 
 
-
 # Experiment 2:
 # Random-walk oddball
 
@@ -198,11 +172,10 @@ def experiment_randomwalk():
     )
 
 
-
 # Plotting
 
 
-def plot_learning_rate_vs_error(results: Dict, title: str):
+def plot_learning_rate_vs_error(results: dict, title: str):
     """
     Replicates Nassar / Foucault style plots:
     learning rate as a function of |prediction error|
@@ -232,12 +205,6 @@ if __name__ == "__main__":
     results_cp = experiment_changepoint()
     results_rw = experiment_randomwalk()
 
-    plot_learning_rate_vs_error(
-        results_cp,
-        "Changepoint oddball environment"
-    )
+    plot_learning_rate_vs_error(results_cp, "Changepoint oddball environment")
 
-    plot_learning_rate_vs_error(
-        results_rw,
-        "Random-walk oddball environment"
-    )
+    plot_learning_rate_vs_error(results_rw, "Random-walk oddball environment")
