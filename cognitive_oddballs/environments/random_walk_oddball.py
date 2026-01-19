@@ -11,7 +11,7 @@ def generate_random_walk_environment(
     n_trials=400,
     oddball_hazard_rate=0.1,
     sigma=25,
-    drift_sigma=10, # medium step sizes
+    drift_sigma=10,  # medium step sizes
     seed=555,
 ) -> pd.DataFrame:
     """
@@ -62,7 +62,7 @@ def generate_random_walk_environment(
 
     # Initialize columns
     df["mu"] = 0.0  # true helicopter position
-    df["x"] = 0.0 #  observed bag drops
+    df["x"] = 0.0  # observed bag drops
     df["sigma"] = sigma  # noise level (constant)
     df["is_oddball"] = False  # track oddball trials
     df["drift"] = 0.0  # track random-walk drift steps
@@ -73,11 +73,11 @@ def generate_random_walk_environment(
 
     # Generate trials
     for t in range(1, n_trials):
-
         # Random walk drift
         drift_step = np.random.normal(0, drift_sigma)
         df.loc[t, "drift"] = drift_step
-         # New helicopter position with clipping to avoid edges
+
+        # New helicopter position with clipping to avoid edges
         new_mu = df.loc[t - 1, "mu"] + drift_step
         df.loc[t, "mu"] = np.clip(new_mu, helicopter_min, helicopter_max)
 

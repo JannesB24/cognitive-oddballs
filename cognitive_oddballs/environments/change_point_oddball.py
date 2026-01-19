@@ -95,7 +95,6 @@ def generate_change_point_environment(
     return df
 
 
-
 if __name__ == "__main__":
     # Generate environment
     df = generate_change_point_environment(
