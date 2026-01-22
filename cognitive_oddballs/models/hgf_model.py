@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Dict, List, Optional, Union
 
 import numpy as np
 from matplotlib import pyplot as plt
 
-Number = Union[int, float, np.number]
+Number = int | float | np.number
 
 
 def exp_clip(x: Number, clip: float = 60.0) -> float:
@@ -36,7 +36,8 @@ class HGFConfig:
     mode: str = "bernoulli"  # "bernoulli" or "gaussian"
 
     # For gaussian mode:
-    # Default is tuned for "scale A" tasks (e.g., outcomes in ~0..300 with observation SD ~5/15/25/35).
+    # Default is tuned for "scale A" tasks
+    # (e.g., outcomes in ~0..300 with observation SD ~5/15/25/35).
     # See Nassar et al. 2010 for typical SD magnitudes.  :contentReference[oaicite:2]{index=2}
     sigma_obs: float = 15.0  # observation noise standard deviation (same units as u)
 
@@ -51,7 +52,8 @@ class HGF:
 
     Supports:
       - Bernoulli-HGF: binary observations (u in {0,1}), observation model is sigmoid(m2)
-      - Gaussian-HGF: continuous observations (u in R), observation model is identity with fixed sigma_obs
+      - Gaussian-HGF: continuous observations (u in R), observation model is identity with
+        fixed sigma_obs
     """
 
     def __init__(
@@ -93,16 +95,16 @@ class HGF:
         self.s3 = float(s3_init)
 
         self.counter = 0
-        self.history: Dict[str, List[float]] = {
+        self.history: dict[str, list[float]] = {
             "u": [],
-            "m1_hat": [],   # predicted mean at observation level
-            "s1_hat": [],   # predicted variance at observation level
+            "m1_hat": [],  # predicted mean at observation level
+            "s1_hat": [],  # predicted variance at observation level
             "m2": [],
             "m3": [],
             "s2": [],
             "s3": [],
-            "d1": [],       # prediction error level 1
-            "d2": [],       # prediction error level 2
+            "d1": [],  # prediction error level 1
+            "d2": [],  # prediction error level 2
         }
 
     # ---------- Level 1 (observation model) ----------
@@ -121,7 +123,7 @@ class HGF:
 
         # Gaussian-HGF: identity observation model, fixed observation noise variance
         m1_hat = float(self.m2)
-        s1_hat = max(self.cfg.sigma_obs ** 2, self.cfg.min_var)
+        s1_hat = max(self.cfg.sigma_obs**2, self.cfg.min_var)
         return m1_hat, s1_hat
 
     # ---------- Predictions (priors) ----------
@@ -180,7 +182,7 @@ class HGF:
         d2 = (self.s2 + (self.m2 - m2_prev) ** 2) / max(s2_prev + e3, self.cfg.min_var) - 1.0
 
         # Step 6: update level 3 (m3 and s3)
-        pi3 = pi3_hat + (self.cfg.kappa ** 2 / 2.0) * w2 * (w2 + r2 * d2)
+        pi3 = pi3_hat + (self.cfg.kappa**2 / 2.0) * w2 * (w2 + r2 * d2)
         self.s3 = 1.0 / max(pi3, self.cfg.min_var)
 
         self.m3 = self.m3 + self.s3 * (self.cfg.kappa / 2.0) * w2 * d2
@@ -198,7 +200,7 @@ class HGF:
 
         self.counter += 1
 
-    def run(self, inputs: Iterable[Number]) -> Dict[str, List[float]]:
+    def run(self, inputs: Iterable[Number]) -> dict[str, list[float]]:
         for u in inputs:
             self.update(u)
         return self.history
@@ -206,7 +208,7 @@ class HGF:
     # ---------- Plotting ----------
     def plot_results(
         self,
-        true_latent: Optional[Iterable[Number]] = None,
+        true_latent: Iterable[Number] | None = None,
         debug_level1_raw_m2: bool = False,
     ):
         trials = np.arange(len(self.history["u"]))
@@ -266,6 +268,7 @@ def _demo_bernoulli():
     hgf.run(u)
     hgf.plot_results(true_latent=p, debug_level1_raw_m2=False)
 
+
 def generate_reference_scenario_bernoulli(seed: int = 42):
     """
     Reference scenario (Bernoulli):
@@ -315,7 +318,7 @@ def _demo_reference_scenario_bernoulli():
     hgf.plot_results(true_latent=true_prob, debug_level1_raw_m2=False)
 
 
-def _demo_gaussian_scale_A():
+def _demo_gaussian_scale_a():
     np.random.seed(0)
     mu = np.concatenate([np.full(80, 100.0), np.full(80, 200.0)])
     # observation noise consistent with scale A
@@ -329,5 +332,5 @@ def _demo_gaussian_scale_A():
 if __name__ == "__main__":
     _demo_bernoulli()
     _demo_reference_scenario_bernoulli()
-    _demo_gaussian_scale_A()
+    _demo_gaussian_scale_a()
     plt.show()
