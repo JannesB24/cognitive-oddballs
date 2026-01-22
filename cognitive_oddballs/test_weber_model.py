@@ -35,6 +35,36 @@ def compare_trajectories(m_1: Weber_model, m_2: Weber_model, node_idx: int, col_
     return pd.DataFrame({col_name_m1: m1_df[col_name], col_name_m2: m2_df[col_name], "Difference": m1_df[col_name]-m2_df[col_name]})
 
 
+def compare_surprise(models: list):
+    """Compares the over all surprise of node 0 of two given Models
+    
+    Input:
+    - models: A list of models to be compared
+    
+    Output:
+    - DataFrame containing the total surprises of node 0 for the models, the max surprise for each and which one has the lowest total surprise"""
+
+
+    comparison = pd.DataFrame({"Model": range(len(models)), "Total_Surprise":range(len(models)), "Max_Surprise": range(len(models)), "Has_lowest_surprise":range(len(models))})
+    for i in range(len(models)):
+        current_model_df = models[i].to_pandas()
+                      
+        comparison.loc[i, "Model"] = ("Model "+str(i+1))
+        comparison.loc[i, "Total_Surprise"] = sum(current_model_df["x_0_surprise"])
+        comparison.loc[i, "Max_Surprise"] = max(current_model_df["x_0_surprise"])
+        
+        if i == 0:
+            lowest_surprise = sum(current_model_df["x_0_surprise"])
+        elif sum(current_model_df["x_0_surprise"]) < lowest_surprise:
+            lowest_surprise = sum(current_model_df["x_0_surprise"])
+
+    comparison["Has_lowest_surprise"] = comparison["Total_Surprise"] <= lowest_surprise
+
+    return comparison
+                 
+            
+
+
 ## generating data from both environments
 oddball_data = generate_oddball_environment(n_trials=1000, oddball_hazard_rate=0.15, sigma=20, change_point_hazard_rate=0.1, seed=42)
 random_walk_data = generate_random_walk_environment(n_trials=1000, oddball_hazard_rate=0.15, sigma=20, seed=42)
@@ -42,20 +72,38 @@ random_walk_data = generate_random_walk_environment(n_trials=1000, oddball_hazar
 ### creating Model instances to test the current attempts
 ## with Node 4
 
-test_rw_low_p = Weber_model(random_walk_data,True)
-test_od_low_p = Weber_model(oddball_data,True)
-test_rw_high_p = Weber_model(random_walk_data,True,1e1)
-test_od_high_p = Weber_model(oddball_data,True,1e1)
+# test_rw_low_p = Weber_model(random_walk_data,True)
+# test_od_low_p = Weber_model(oddball_data,True)
+# test_rw_high_p = Weber_model(random_walk_data,True,1e1)
+# test_od_high_p = Weber_model(oddball_data,True,1e1)
 
 ## without Node 4 somewhat confusingly named
 
-# test_rw_3node = Weber_model(random_walk_data, node4=False)
-# test_od_3node = Weber_model(oddball_data, node4=False)
+test_rw_3node = Weber_model(random_walk_data, node4=False)
+test_od_3node = Weber_model(oddball_data, node4=False)
+
+
+# ### comparing the surprises of different models in oddball environment
+# surprise_comparison = compare_surprise([test_od_high_p, test_od_3node])
+# print(surprise_comparison)
+#
+# ## RESULT
+# ## Model with node 4 at high precision has lower surprise than Model without node 4. Highest Surprise is the same for both tho
+
+
+### comparing hte surprise of Models without Node 4 across environments
+#
+surprise_comparison = compare_surprise([test_rw_3node, test_od_3node])
+print(surprise_comparison)
+#
+### RESULT
+## Model performs slightly better in Random walk environment. (Total surprise: 6118 vs. 6223)
+## Even though the max surprise is a higher value in the random walk environment (Max surprise: 29 vs. 25)
 
 
 # ### comparing the precision trajectories of node 3
 #
-rw_precision_comp = compare_trajectories(test_rw_low_p,test_rw_high_p,3,"precision")
+#rw_precision_comp = compare_trajectories(test_rw_low_p,test_rw_high_p,3,"precision")
 # od_precision_comp = compare_precisions(test_od_low_p,test_od_high_p,3,"precision")
 #
 # rw_precision_comp.to_csv("rw_precision_comp.csv")
