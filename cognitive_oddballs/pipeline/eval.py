@@ -5,11 +5,14 @@ Environments (already implemented):
 - generate_change_point_environment
 - generate_random_walk_environment
 
-Models:
+Perceptual Models based on Hierarchical Gaussian FFilter (Mathys et al. 2011, 2014) and Change Point Model (Nassar et al. 2010, 2016):
 - Two model types
 - Two variants per model type
 
+Response Model as defined in Markovic and Kiebel (2016)
+
 Evaluation inspired by:
+- Markovic and Kiebel (2016)
 - Nassar et al. (2010, 2016, 2019)
 - Razmi and  Nassar (2022)
 - Foucault et al. (2025)
@@ -34,9 +37,10 @@ from environments import (
     generate_random_walk_environment
 )
 
-# from models.model_type_a import model_a_v1, model_a_v2
-# from models.model_type_b import model_b_v1, model_b_v2
 
+from models import (
+    ChangePointNassarModel
+)
 
 # Paths
 
@@ -58,6 +62,22 @@ def set_seed(seed: int = 42):
 
 # Evaluation metrics
 
+#similar the model performance evaluation by Markovic and Kiebel (2016) we use RMSE and Variational Free Energy (VFE) as evaluation metrics
+
+
+def rmse(predictions, targets):
+    return np.sqrt(np.mean((predictions - targets) ** 2)) 
+    """Root Mean Square Error (RMSE) between predictions and targets. 
+ """
+def log_likelihood(predictions, targets, noise_std):
+    residuals = targets - predictions
+    return -0.5 * np.sum(
+        (residuals / noise_std) ** 2 + np.log(2 * np.pi * noise_std ** 2)
+    )
+
+
+
+
 
 def compute_apparent_learning_rate(updates, prediction_errors):
     """
@@ -73,6 +93,30 @@ def compute_apparent_learning_rate(updates, prediction_errors):
     lr[valid] = updates[valid] / pes[valid]
 
     return lr
+
+# Response Model
+class GaussianResponseModel:
+    """
+    r_t = mu_t + epsilon
+    epsilon ~ N(0, sigma_r^2)
+    """
+    def __init__(self, response_noise_std: float):
+        self.sigma = response_noise_std
+
+    def sample(self, belief_mean: float) -> float:
+        return belief_mean + np.random.randn() * self.sigma
+
+    def log_likelihood(self, response: float, belief_mean: float) -> float:
+        return (
+            -0.5 * ((response - belief_mean) / self.sigma) ** 2
+            - np.log(np.sqrt(2 * np.pi) * self.sigma)
+        )
+
+
+
+
+
+
 
 
 def evaluate_outputs(outputs: Dict) -> Dict:
@@ -94,41 +138,42 @@ def evaluate_outputs(outputs: Dict) -> Dict:
 
 
 # Core simulation loop
-
-
 def run_model_on_environment(
     model_fn: Callable,
+    response_model: GaussianResponseModel,
     observations: np.ndarray
 ) -> Dict:
     """
-    Runs a single model on a fixed observation sequence.
-
-    Assumptions about model_fn:
-    - model_fn.reset()
-    - model_fn.predict()
-    - model_fn.update(observation)
-    - model_fn.last_update
+    Runs perceptual + response model on a sequence
     """
 
     model_fn.reset()
 
     outputs = {
+        "beliefs": [],
+        "responses": [],
         "prediction_errors": [],
         "updates": [],
+        "log_likelihoods": [],
     }
 
-    for obs in observations:
-        pred = model_fn.predict()
-        pe = obs - pred
 
+    for obs in observations:
+        belief = model_fn.predict()
+        response = response_model.sample(belief)
+
+        pe = obs - belief
         model_fn.update(obs)
 
+        ll = response_model.log_likelihood(obs, belief)
+
+        outputs["beliefs"].append(belief)
+        outputs["responses"].append(response)
         outputs["prediction_errors"].append(pe)
         outputs["updates"].append(model_fn.last_update)
+        outputs["log_likelihoods"].append(ll)
 
-    return evaluate_outputs(outputs)
-
-
+    return outputs
 
 # Experiment runner
 
@@ -137,21 +182,61 @@ def run_experiment(
     environment_fn: Callable,
     models: Dict[str, Callable],
     n_trials: int,
-    experiment_name: str
+    experiment_name: str,
+    response_noise_std: float = 5.0,
+    n_simulations: int = 1  # Default to 1 simulation if not specified
 ) -> Dict:
     """
     Run all models on a single environment.
     """
 
-    observations = environment_fn(n_trials=n_trials)
-
     results = {}
 
     for model_name, model_fn in models.items():
-        results[model_name] = run_model_on_environment(
-            model_fn,
-            observations
-        )
+        # Initialize arrays to collect data across simulations
+        all_learning_rates = np.zeros((n_simulations, n_trials))
+        all_prediction_errors = np.zeros((n_simulations, n_trials))
+        all_updates = np.zeros((n_simulations, n_trials))
+        all_beliefs = np.zeros((n_simulations, n_trials))
+        all_responses = np.zeros((n_simulations, n_trials))
+        all_loglik = np.zeros(n_simulations)
+        all_rmse = np.zeros(n_simulations)
+
+        for sim in range(n_simulations):
+            # Generate a new environment for each simulation
+            observations = environment_fn(n_trials=n_trials)
+            response_model = GaussianResponseModel(response_noise_std)
+
+            outputs = run_model_on_environment(
+                model_fn,
+                response_model,
+                observations
+            )
+
+            lr = compute_apparent_learning_rate(
+                outputs["updates"],
+                outputs["prediction_errors"]
+            )
+            
+
+            # Store the results for this simulation
+            all_learning_rates[sim] = lr
+            all_prediction_errors[sim] = outputs["prediction_errors"]
+            all_updates[sim] = outputs["updates"]
+            all_beliefs[sim] = outputs["beliefs"]
+            all_responses[sim] = outputs["responses"]
+            all_loglik[sim] = np.sum(outputs["log_likelihoods"])
+            all_rmse[sim] = rmse(outputs["beliefs"], outputs["responses"])
+
+        results[model_name] = {
+            "learning_rate": all_learning_rates,
+            "prediction_errors": all_prediction_errors,
+            "updates": all_updates,
+            "beliefs": all_beliefs,
+            "responses": all_responses,
+            "log_likelihood": all_loglik,
+            "rmse": all_rmse,
+        }
 
     return results
 
@@ -163,10 +248,7 @@ def run_experiment(
 
 def experiment_changepoint():
     models = {
-        "ModelA_v1": None,  # model_a_v1(...)
-        "ModelA_v2": None,
-        "ModelB_v1": None,
-        "ModelB_v2": None,
+        "CPM": ChangePointNassarModel(),
     }
 
     return run_experiment(
@@ -174,6 +256,7 @@ def experiment_changepoint():
         models=models,
         n_trials=1000,
         experiment_name="changepoint_oddball",
+        n_simulations=10
     )
 
 
@@ -181,13 +264,9 @@ def experiment_changepoint():
 # Experiment 2:
 # Random-walk oddball
 
-
 def experiment_randomwalk():
     models = {
-        "ModelA_v1": None,
-        "ModelA_v2": None,
-        "ModelB_v1": None,
-        "ModelB_v2": None,
+        "CPM": ChangePointNassarModel(),
     }
 
     return run_experiment(
@@ -195,6 +274,7 @@ def experiment_randomwalk():
         models=models,
         n_trials=1000,
         experiment_name="randomwalk_oddball",
+        n_simulations=10
     )
 
 
