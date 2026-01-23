@@ -3,7 +3,7 @@ import numpy as np
 
 class Weber_model(Network):
 
-    def __init__(self,  input, node4 = True, n4_p = 3.0):
+    def __init__(self,  input, node4 = True, node_4_type = "volatility_parent", n4_p = 3.0):
         """A subclass of the pyhfg Network class.
         Each Instance is a set network of either 4 or 5 Nodes (node 4 can be left out for experimental purposes):
             Node 0: Continous input Node
@@ -14,8 +14,9 @@ class Weber_model(Network):
 
             Input:
             - input: a Dataframe containing observations (in a column named 'x'), to which the model is fit.
-            - node4: A Boolean indicating whether the model contains node 4
-            - n4_p: precision of node 4, if used
+            - node4: A Boolean indicating whether the model contains node 4 (default true)
+            - node_4_type: a string indicating whether node 4 is supposed to be a value parent or a volatility parent (default volatility parent)
+            - n4_p: precision of node 4, if used (default 3, as that was the sweetspot for model performance in both environments)
 
         """
         super().__init__()
@@ -24,7 +25,13 @@ class Weber_model(Network):
         self.add_nodes( volatility_children=1)
         self.add_nodes( volatility_children=0)
         if node4:
-            self.add_nodes( precision = n4_p, volatility_children=3 ) # jump from precison 3 to 4 made it give up earlier in random walk environment
+            if node_4_type not in ["volatility_parent", "value_parent"]:
+                raise ValueError("node_4_type has to be either 'volatility_parent' or 'value_parent'.")
+            elif node_4_type == "volatility_parent":
+                self.add_nodes( precision = n4_p, volatility_children=3) # jump from precison 3 to 4 made it give up earlier in random walk environment
+            else:
+                self.add_nodes( precision = n4_p, value_children=3)
+                
         self.input_data(input["x"].to_numpy())
         
   # precision 3 seems to be the sweet spot so far, such that the first 500 trials can be predicted and are shown in graph (more trials still not working)
