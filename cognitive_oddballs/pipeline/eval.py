@@ -1,11 +1,13 @@
 """
-Pipeline for evaluating models on oddball tasks
+Pipeline for evaluating models on oddball tasks.
 
 Environments (already implemented):
 - generate_change_point_environment
 - generate_random_walk_environment
 
-Perceptual Models based on Hierarchical Gaussian FFilter (Mathys et al. 2011, 2014) and Change Point Model (Nassar et al. 2010, 2016):
+Perceptual Models based on Hierarchical Gaussian Filter (Mathys et al. 2011, 2014) and
+Change Point Model (Nassar et al. 2010, 2016):
+
 - Two model types
 - Two variants per model type
 
@@ -16,67 +18,47 @@ Evaluation inspired by:
 - Nassar et al. (2010, 2016, 2019)
 - Razmi and  Nassar (2022)
 - Foucault et al. (2025)
+
+
+Evaluation Metrics:
+    Similar to the model performance evaluation by Markovic and Kiebel (2016)
+    we use RMSE and Variational Free Energy (VFE) as evaluation metrics.
 """
 
+from collections.abc import Callable
+from pathlib import Path
 
-# Imports
-
-
-import os
-import json
-import numpy as np
 import matplotlib.pyplot as plt
-from typing import Dict, Callable
+import numpy as np
+import pandas as pd
 
-
-# External imports (existing)
-
-
-from environments import (
-    generate_change_point_environment,
-    generate_random_walk_environment
-)
-
-
-from models import (
-    ChangePointNassarModel
-)
+from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
+from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
+from cognitive_oddballs.models.change_point_nassar_2016 import ChangePointNassarModel
+from cognitive_oddballs.models.cpm_markovic_adjusted import ChangePointModelVarInference
 
 # Paths
+PROJECT_ROOT = Path(__file__).resolve().parent
+RESULTS_DIR = PROJECT_ROOT / "results"
+FIGURES_DIR = RESULTS_DIR / "figures"
 
-
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-RESULTS_DIR = os.path.join(PROJECT_ROOT, "results")
-FIGURES_DIR = os.path.join(RESULTS_DIR, "figures")
-
-os.makedirs(FIGURES_DIR, exist_ok=True)
+FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # Utilities
-
-
 def set_seed(seed: int = 42):
     np.random.seed(seed)
 
 
-
 # Evaluation metrics
+def rmse(predictions: np.ndarray, targets: np.ndarray) -> float:
+    """Root Mean Square Error (RMSE) between predictions and targets."""
+    return np.sqrt(np.mean((predictions - targets) ** 2))
 
-#similar the model performance evaluation by Markovic and Kiebel (2016) we use RMSE and Variational Free Energy (VFE) as evaluation metrics
 
-
-def rmse(predictions, targets):
-    return np.sqrt(np.mean((predictions - targets) ** 2)) 
-    """Root Mean Square Error (RMSE) between predictions and targets. 
- """
-def log_likelihood(predictions, targets, noise_std):
+def log_likelihood(predictions: np.ndarray, targets: np.ndarray, noise_std: float) -> float:
     residuals = targets - predictions
-    return -0.5 * np.sum(
-        (residuals / noise_std) ** 2 + np.log(2 * np.pi * noise_std ** 2)
-    )
-
-
-
+    return -0.5 * np.sum((residuals / noise_std) ** 2 + np.log(2 * np.pi * noise_std**2))
 
 
 def compute_apparent_learning_rate(updates, prediction_errors):
@@ -94,12 +76,14 @@ def compute_apparent_learning_rate(updates, prediction_errors):
 
     return lr
 
+
 # Response Model
 class GaussianResponseModel:
     """
     r_t = mu_t + epsilon
     epsilon ~ N(0, sigma_r^2)
     """
+
     def __init__(self, response_noise_std: float):
         self.sigma = response_noise_std
 
@@ -107,26 +91,16 @@ class GaussianResponseModel:
         return belief_mean + np.random.randn() * self.sigma
 
     def log_likelihood(self, response: float, belief_mean: float) -> float:
-        return (
-            -0.5 * ((response - belief_mean) / self.sigma) ** 2
-            - np.log(np.sqrt(2 * np.pi) * self.sigma)
+        return -0.5 * ((response - belief_mean) / self.sigma) ** 2 - np.log(
+            np.sqrt(2 * np.pi) * self.sigma
         )
 
 
-
-
-
-
-
-
-def evaluate_outputs(outputs: Dict) -> Dict:
+def evaluate_outputs(outputs: dict) -> dict:
     """
     Compute model-agnostic metrics.
     """
-    lr = compute_apparent_learning_rate(
-        outputs["updates"],
-        outputs["prediction_errors"]
-    )
+    lr = compute_apparent_learning_rate(outputs["updates"], outputs["prediction_errors"])
 
     return {
         "learning_rate": lr,
@@ -136,36 +110,36 @@ def evaluate_outputs(outputs: Dict) -> Dict:
     }
 
 
-
 # Core simulation loop
 def run_model_on_environment(
-    model_fn: Callable,
-    response_model: GaussianResponseModel,
-    observations: np.ndarray
-) -> Dict:
+    model_fn: Callable, response_model: GaussianResponseModel, observations: np.ndarray
+) -> dict:
     """
     Runs perceptual + response model on a sequence
     """
 
-    model_fn.reset()
+    # model_fn.reset() # Maybe create a new instance of the model?!
 
-    outputs = {
-        "beliefs": [],
-        "responses": [],
-        "prediction_errors": [],
-        "updates": [],
-        "log_likelihoods": [],
-    }
+    outputs = pd.DataFrame(
+        {
+            "beliefs": pd.Series(dtype=float),
+            "responses": pd.Series(dtype=float),
+            "prediction_errors": pd.Series(dtype=float),
+            "updates": pd.Series(dtype=float),
+            "log_likelihoods": pd.Series(dtype=float),
+        }
+    )
 
+    model_fn
 
-    for obs in observations:
+    for observation in observations:
         belief = model_fn.predict()
         response = response_model.sample(belief)
 
-        pe = obs - belief
-        model_fn.update(obs)
+        pe = observation - belief
+        model_fn.update(observation)
 
-        ll = response_model.log_likelihood(obs, belief)
+        ll = response_model.log_likelihood(observation, belief)
 
         outputs["beliefs"].append(belief)
         outputs["responses"].append(response)
@@ -175,17 +149,17 @@ def run_model_on_environment(
 
     return outputs
 
+
 # Experiment runner
 
 
 def run_experiment(
     environment_fn: Callable,
-    models: Dict[str, Callable],
+    models: dict[str, Callable],
     n_trials: int,
-    experiment_name: str,
     response_noise_std: float = 5.0,
-    n_simulations: int = 1  # Default to 1 simulation if not specified
-) -> Dict:
+    n_simulations: int = 1,  # Default to 1 simulation if not specified
+) -> dict:
     """
     Run all models on a single environment.
     """
@@ -207,17 +181,9 @@ def run_experiment(
             observations = environment_fn(n_trials=n_trials)
             response_model = GaussianResponseModel(response_noise_std)
 
-            outputs = run_model_on_environment(
-                model_fn,
-                response_model,
-                observations
-            )
+            outputs = run_model_on_environment(model_fn, response_model, observations)
 
-            lr = compute_apparent_learning_rate(
-                outputs["updates"],
-                outputs["prediction_errors"]
-            )
-            
+            lr = compute_apparent_learning_rate(outputs["updates"], outputs["prediction_errors"])
 
             # Store the results for this simulation
             all_learning_rates[sim] = lr
@@ -241,28 +207,26 @@ def run_experiment(
     return results
 
 
-
 # Experiment 1:
 # Changepoint oddball
 
 
 def experiment_changepoint():
     models = {
-        "CPM": ChangePointNassarModel(),
+        "CPM": ChangePointModelVarInference(mu0=250, sigma0=50, obs_noise=5, w1=0.5, w2=0.5, h=0.1),
     }
 
     return run_experiment(
         environment_fn=generate_change_point_environment,
         models=models,
         n_trials=1000,
-        experiment_name="changepoint_oddball",
-        n_simulations=10
+        n_simulations=10,
     )
-
 
 
 # Experiment 2:
 # Random-walk oddball
+
 
 def experiment_randomwalk():
     models = {
@@ -273,16 +237,14 @@ def experiment_randomwalk():
         environment_fn=generate_random_walk_environment,
         models=models,
         n_trials=1000,
-        experiment_name="randomwalk_oddball",
-        n_simulations=10
+        n_simulations=10,
     )
-
 
 
 # Plotting
 
 
-def plot_learning_rate_vs_error(results: Dict, title: str):
+def plot_learning_rate_vs_error(results: dict, title: str):
     """
     Replicates Nassar / Foucault style plots:
     learning rate as a function of |prediction error|
@@ -310,14 +272,8 @@ if __name__ == "__main__":
     set_seed(42)
 
     results_cp = experiment_changepoint()
-    results_rw = experiment_randomwalk()
+    # results_rw = experiment_randomwalk()
 
-    plot_learning_rate_vs_error(
-        results_cp,
-        "Changepoint oddball environment"
-    )
+    plot_learning_rate_vs_error(results_cp, "Changepoint oddball environment")
 
-    plot_learning_rate_vs_error(
-        results_rw,
-        "Random-walk oddball environment"
-    )
+    # plot_learning_rate_vs_error(results_rw, "Random-walk oddball environment")

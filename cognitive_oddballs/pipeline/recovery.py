@@ -1,27 +1,22 @@
 """
-Doing model recovery for the different models on the oddball task using BIC. 
+Doing model recovery for the different models on the oddball task using BIC.
 
 Additional assumptions (compared to eval.py) about model_fn:
     - model_fn.convert_to_loglike(prediction_error)
-    - model_fn.n_params  
+    - model_fn.n_params
 
 Requires information about fitted model parameters and parameter space of each model.
 
 """
+
+from collections.abc import Callable
+
 import numpy as np
-from typing import Dict, Callable
-
-from environments import (
-    generate_change_point_environment,
-    generate_random_walk_environment
+from environments import generate_change_point_environment, generate_random_walk_environment
+from eval import (
+    run_model_on_environment,
 )
 
-from eval import(
-    experiment_changepoint,
-    experiment_randomwalk,
-    run_experiment,
-    run_model_on_environment
-)
 
 def set_seed(seed: int = 42):
     np.random.seed(seed)
@@ -42,10 +37,10 @@ def calculate_bic(num_params: int, num_data_points: int, ll: float) -> float:
 
 
 def grid_search(
-        model_cls: Callable,
-        param_grid: np.ndarray,
-        observations: np.ndarray,
-    ):
+    model_cls: Callable,
+    param_grid: np.ndarray,
+    observations: np.ndarray,
+):
     """
     Grid search for given model class over given parameter space, based on log likelihood.
 
@@ -68,16 +63,13 @@ def grid_search(
         if ll > best_ll:
             best_ll = ll
             best_params = params
-    
+
     return best_params, best_ll
 
 
 def model_recovery_per_synth_set(
-        synth: np.ndarray,
-        models: Dict[str, Callable],
-        n_trials: int,
-        param_grids: Dict[str, Callable]
-    ) -> Dict: 
+    synth: np.ndarray, models: dict[str, Callable], n_trials: int, param_grids: dict[str, Callable]
+) -> dict:
     """
     Exectues the model recovery for a dictionary of models and compares them via their BIC score.
 
@@ -96,38 +88,29 @@ def model_recovery_per_synth_set(
     # initialize storage for BICs
     bic_scores = {}
 
-    # iterate through models 
+    # iterate through models
     for name, model_cls in models.items():
         # identify best parameters for model and obs
-        best_params, best_ll = grid_search(
-            model_cls, param_grids[name], synth
-        )
+        best_params, best_ll = grid_search(model_cls, param_grids[name], synth)
 
         # calculat BIC score for that combination
-        bic = calculate_bic(
-            num_params=model_cls.n_params, 
-            num_data_points=n_trials, 
-            ll=best_ll
-        )
+        bic = calculate_bic(num_params=model_cls.n_params, num_data_points=n_trials, ll=best_ll)
 
-        bic_scores[name] = {
-            "bic": bic,
-            "best_params": best_params,
-            "best_ll": best_ll
-        }
+        bic_scores[name] = {"bic": bic, "best_params": best_params, "best_ll": best_ll}
 
     return bic_scores
 
+
 def model_recovery_per_env(
-        models: Dict[str, Callable],
-        true_params: Dict[str, Callable],
-        environment_fn: Callable,
-        n_trials: int,
-        param_grids: Dict[str, Callable]
-    ) -> Dict:
+    models: dict[str, Callable],
+    true_params: dict[str, Callable],
+    environment_fn: Callable,
+    n_trials: int,
+    param_grids: dict[str, Callable],
+) -> dict:
     """
     Evaluates BIC of all given models for a given environment.
-    Generates synthetic data for the given amount of trials for every model in dicitonary, 
+    Generates synthetic data for the given amount of trials for every model in dicitonary,
     given "ground-truth" model parameters and environment instance.
     Calls model_recovery_per_synth on that dataset.
 
@@ -147,17 +130,21 @@ def model_recovery_per_env(
         true_model = true_cls(*true_params[true_name])
         observations = environment_fn(n_trials=n_trials)
         synthetic_data = run_model_on_environment(true_model, observations)
-        synthetic_data = np.asarray(synthetic_data["updates"]) # TODO, might be synthetic_data["prediciton errors"] or sth else entirely
+        synthetic_data = np.asarray(
+            synthetic_data["updates"]
+        )  # TODO, might be synthetic_data["prediciton errors"] or sth else entirely
 
         # perform actual model recovery
         # TODO: this dictionary entry is going to be somewhat misleading, since it saves the different models given the true model, should find other solution
-        bic_per_env[true_name] = model_recovery_per_synth_set(synth=synthetic_data, models=models, n_trials=n_trials, param_grids=param_grids)
+        bic_per_env[true_name] = model_recovery_per_synth_set(
+            synth=synthetic_data, models=models, n_trials=n_trials, param_grids=param_grids
+        )
 
     return bic_per_env
 
 
 def modelrec_changepoint(
-        # TODO
+    # TODO
 ):
     models = {
         "ModelA_v1": None,
@@ -174,7 +161,7 @@ def modelrec_changepoint(
 
 
 def modelrec_randomwalk(
-        # TODO
+    # TODO
 ):
     models = {
         "ModelA_v1": None,
@@ -188,6 +175,7 @@ def modelrec_randomwalk(
         models=models,
         # TODO
     )
+
 
 # Main
 if __name__ == "__main__":
