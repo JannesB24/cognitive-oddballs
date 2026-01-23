@@ -268,6 +268,7 @@ def _demo_bernoulli():
     hgf.run(u)
     hgf.plot_results(true_latent=p, debug_level1_raw_m2=False)
 
+
 def generate_reference_scenario_bernoulli(seed: int = 42):
     """
     Reference scenario (Bernoulli):
