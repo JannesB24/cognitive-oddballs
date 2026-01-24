@@ -10,6 +10,9 @@ import pandas as pd
 from scipy import stats
 import matplotlib.pyplot as plt
 
+from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
+from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
+
 
 # Normative Model Class
 class ChangePointNassarModel:
@@ -375,5 +378,28 @@ class ChangePointNassarModel:
     
         plt.tight_layout()
         plt.show()
+
+    
+if __name__ == "__main__":
+    # Generate environment
+    df_change_point = generate_change_point_environment(
+        n_trials=400, oddball_hazard_rate=0.1, sigma=25, change_point_hazard_rate=0.1, seed=555
+    )
+    # Generate environment
+    df_random_walk = generate_random_walk_environment(
+        n_trials=400,
+        oddball_hazard_rate=0.1,
+        sigma=25,
+        drift_sigma=10,
+        seed=555,
+    )
+
+    nassar_model_with_change = ChangePointNassarModel(x=df_change_point["x"], sigma_sequence=df_change_point["sigma"])
+    normative_model_results_change = nassar_model_with_change.run(mu=df_change_point["mu"])
+    nassar_model_with_change.plot_results(normative_model_results_change, env_df=df_change_point)
+    
+    nassar_model_with_random_walk = ChangePointNassarModel(x=df_random_walk["x"], sigma_sequence=df_random_walk["sigma"])
+    normative_model_results_random = nassar_model_with_random_walk.run(mu=df_random_walk["mu"])
+    nassar_model_with_random_walk.plot_results(normative_model_results_random, env_df=df_random_walk)
 
     
