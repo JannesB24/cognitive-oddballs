@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import stats
-import matplotlib.pyplot as plt
 
 from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
@@ -450,12 +449,12 @@ if __name__ == "__main__":
     ).mean()
 
     # Print summary statistics
-    print(f"\nChange-Point Environment Results:")
+    print("\nChange-Point Environment Results:")
     print(f"  Mean learning rate: {normative_model_results_change['LearningRate'].mean():.4f}")
     print(f"  Max learning rate: {normative_model_results_change['LearningRate'].max():.4f}")
     print(f"  Mean CPP: {normative_model_results_change['CPP'].mean():.4f}")
     print(f"  Max CPP: {normative_model_results_change['CPP'].max():.4f}")
-    print(f"\nPerformance Metrics:")
+    print("\nPerformance Metrics:")
     print(f"  MAE (mean absolute error): {mae_change:.4f}")
 
     print("\nGenerating plots for change-point environment...")
@@ -482,12 +481,12 @@ if __name__ == "__main__":
     ).mean()
 
     # Print summary statistics
-    print(f"\nRandom Walk Environment Results:")
+    print("\nRandom Walk Environment Results:")
     print(f"  Mean learning rate: {normative_model_results_random['LearningRate'].mean():.4f}")
     print(f"  Max learning rate: {normative_model_results_random['LearningRate'].max():.4f}")
     print(f"  Mean CPP: {normative_model_results_random['CPP'].mean():.4f}")
     print(f"  Max CPP: {normative_model_results_random['CPP'].max():.4f}")
-    print(f"\nPerformance Metrics:")
+    print("\nPerformance Metrics:")
     print(f"  MAE (mean absolute error): {mae_random:.4f}")
 
     print("\nGenerating plots for random walk environment...")
