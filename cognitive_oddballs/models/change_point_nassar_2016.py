@@ -423,11 +423,45 @@ class ChangePointNassarModel:
 
 
 if __name__ == "__main__":
-    # Generate environment
+    from cognitive_oddballs.environments.change_point_oddball import (
+        generate_change_point_environment,
+    )
+    from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
+
+    print("=" * 60)
+    print("Testing Nassar 2016 Model")
+    print("=" * 60)
+
+    # Generate change-point environment
+    print("\n1. Testing with Change-Point Environment...")
     df_change_point = generate_change_point_environment(
         n_trials=400, oddball_hazard_rate=0.1, sigma=25, change_point_hazard_rate=0.1, seed=555
     )
-    # Generate environment
+
+    nassar_model_with_change = ChangePointNassarModel(
+        x=df_change_point["x"], sigma_sequence=df_change_point["sigma"]
+    )
+    normative_model_results_change = nassar_model_with_change.run(mu=df_change_point["mu"])
+
+    # Calculate MAE
+    mae_change = np.abs(
+        normative_model_results_change["Belief"] - normative_model_results_change["TruePosition"]
+    ).mean()
+
+    # Print summary statistics
+    print("\nChange-Point Environment Results:")
+    print(f"  Mean learning rate: {normative_model_results_change['LearningRate'].mean():.4f}")
+    print(f"  Max learning rate: {normative_model_results_change['LearningRate'].max():.4f}")
+    print(f"  Mean CPP: {normative_model_results_change['CPP'].mean():.4f}")
+    print(f"  Max CPP: {normative_model_results_change['CPP'].max():.4f}")
+    print("\nPerformance Metrics:")
+    print(f"  MAE (mean absolute error): {mae_change:.4f}")
+
+    print("\nGenerating plots for change-point environment...")
+    nassar_model_with_change.plot_results(normative_model_results_change, env_df=df_change_point)
+
+    # Generate random walk environment
+    print("\n2. Testing with Random Walk Environment...")
     df_random_walk = generate_random_walk_environment(
         n_trials=400,
         oddball_hazard_rate=0.1,
@@ -436,16 +470,28 @@ if __name__ == "__main__":
         seed=555,
     )
 
-    nassar_model_with_change = ChangePointNassarModel(
-        x=df_change_point["x"], sigma_sequence=df_change_point["sigma"]
-    )
-    normative_model_results_change = nassar_model_with_change.run(mu=df_change_point["mu"])
-    nassar_model_with_change.plot_results(normative_model_results_change, env_df=df_change_point)
-
     nassar_model_with_random_walk = ChangePointNassarModel(
         x=df_random_walk["x"], sigma_sequence=df_random_walk["sigma"]
     )
     normative_model_results_random = nassar_model_with_random_walk.run(mu=df_random_walk["mu"])
+
+    # Calculate MAE
+    mae_random = np.abs(
+        normative_model_results_random["Belief"] - normative_model_results_random["TruePosition"]
+    ).mean()
+
+    # Print summary statistics
+    print("\nRandom Walk Environment Results:")
+    print(f"  Mean learning rate: {normative_model_results_random['LearningRate'].mean():.4f}")
+    print(f"  Max learning rate: {normative_model_results_random['LearningRate'].max():.4f}")
+    print(f"  Mean CPP: {normative_model_results_random['CPP'].mean():.4f}")
+    print(f"  Max CPP: {normative_model_results_random['CPP'].max():.4f}")
+    print("\nPerformance Metrics:")
+    print(f"  MAE (mean absolute error): {mae_random:.4f}")
+
+    print("\nGenerating plots for random walk environment...")
     nassar_model_with_random_walk.plot_results(
         normative_model_results_random, env_df=df_random_walk
     )
+
+    print("\nDone!")
