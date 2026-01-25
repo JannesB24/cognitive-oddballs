@@ -79,8 +79,8 @@ def run_model_on_environment(
 # MLE grid search + BIC
 
 
-def calculate_bic(k, T, ll):
-    return k * np.log(T) - 2 * ll
+def calculate_bic(k, n_trials, ll):
+    return k * np.log(n_trials) - 2 * ll
 
 
 def grid_search_mle(model_cls, param_grid, observations, responses, sigma_r):

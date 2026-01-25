@@ -83,7 +83,8 @@ def model_recovery_per_synth_set(
         n_trials (int): Amount of trials in dataset.
         param_grids (Dict[str, Callable]): Parameter space to evaluate in gridsearch.
     Returns:
-        bic_scores (Dict[str, Callable]): BIC score for best-performing parameter combination of every model class on given synthetic dataset.
+        bic_scores (Dict[str, Callable]): BIC score for best-performing parameter combination
+        of every model class on given synthetic dataset.
     """
     # initialize storage for BICs
     bic_scores = {}
@@ -121,7 +122,8 @@ def model_recovery_per_env(
         n_trials (int): Amount of trials to generate/in dataset.
         param_grids (Dict[str, Callable]): Parameter space to evaluate in gridsearch.
     Returns:
-        bic_per_env (Dict[str, Callable]): Dictionary of BIC scores for given environment -- find BIC scores of different models given name of ground truth model.
+        bic_per_env (Dict[str, Callable]): Dictionary of BIC scores for given environment --
+        find BIC scores of different models given name of ground truth model.
     """
     bic_per_env = {}
 
@@ -135,7 +137,8 @@ def model_recovery_per_env(
         )  # TODO, might be synthetic_data["prediciton errors"] or sth else entirely
 
         # perform actual model recovery
-        # TODO: this dictionary entry is going to be somewhat misleading, since it saves the different models given the true model, should find other solution
+        # TODO: this dictionary entry is going to be somewhat misleading, since it saves the
+        # different models given the true model, should find other solution
         bic_per_env[true_name] = model_recovery_per_synth_set(
             synth=synthetic_data, models=models, n_trials=n_trials, param_grids=param_grids
         )

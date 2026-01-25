@@ -130,8 +130,6 @@ def run_model_on_environment(
         }
     )
 
-    model_fn
-
     for observation in observations:
         belief = model_fn.predict()
         response = response_model.sample(belief)
