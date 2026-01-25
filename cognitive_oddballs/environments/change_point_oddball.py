@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from environments.visualizer import visualize_environment, visualize_summary
+from cognitive_oddballs.environments.visualizer import visualize_environment, visualize_summary
 
 BAG_MIN_POS = 0
 BAG_MAX_POS = 500
