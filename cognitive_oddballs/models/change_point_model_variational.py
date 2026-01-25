@@ -508,10 +508,10 @@ class ChangePointModelVariational:
 
 
 if __name__ == "__main__":
-    from cognitive_oddballs.environments.change_point_oddball import (
+    from environments.change_point_oddball import (
         generate_change_point_environment,
     )
-    from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
+    from environments.random_walk_oddball import generate_random_walk_environment
 
     print("=" * 60)
     print("Testing ChangePointModel_Variational (CPM 2016 Adjusted)")
