@@ -24,12 +24,6 @@ def sigmoid_stable(x: Number) -> float:
         z = np.exp(x)
         return float(z / (1.0 + z))
 
-
-def _dbg_fail(t: int, **vals) -> None:
-    msg = "BAD @t=" + str(t) + " | " + " ".join(f"{k}={v:.6g}" for k, v in vals.items())
-    raise FloatingPointError(msg)
-
-
 @dataclass
 class HGF2Config:
     # Core HGF parameters
