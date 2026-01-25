@@ -11,10 +11,6 @@ def main():
         n_trials=100, drift_sigma=5, oddball_hazard_rate=0.02, sigma=25, seed=42
     )
 
-    nassar_model = ChangePointNassarModel(X=df["x"], sigma_sequence=df["sigma"])
-    normative_model_results = nassar_model.run()
-    print(normative_model_results)
-
 
 if __name__ == "__main__":
     main()
