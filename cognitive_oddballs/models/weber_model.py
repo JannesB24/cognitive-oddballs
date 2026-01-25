@@ -109,3 +109,4 @@ class Weber_model(Network):
         for i in range(len(trajectories)-1):
             outputs["updates"].append(trajectories.loc[i+1, "x_0_expected_mean"])
         outputs["updates"].append(trajectories.loc[len(trajectories), "x_0_expected_mean"])
+        return outputs
