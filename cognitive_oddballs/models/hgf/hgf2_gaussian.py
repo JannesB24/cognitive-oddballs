@@ -8,9 +8,11 @@ from matplotlib import pyplot as plt
 
 Number = int | float | np.number
 
+
 def exp_clip(x: Number, clip: float = 60.0) -> float:
     """Exponentiation with clipping to avoid overflow."""
     return float(np.exp(np.clip(float(x), -clip, clip)))
+
 
 def sigmoid_stable(x: Number) -> float:
     """Numerically stable sigmoid."""
@@ -22,9 +24,11 @@ def sigmoid_stable(x: Number) -> float:
         z = np.exp(x)
         return float(z / (1.0 + z))
 
+
 def _dbg_fail(t: int, **vals) -> None:
     msg = "BAD @t=" + str(t) + " | " + " ".join(f"{k}={v:.6g}" for k, v in vals.items())
     raise FloatingPointError(msg)
+
 
 @dataclass
 class HGF2Config:
@@ -32,14 +36,14 @@ class HGF2Config:
     # world state
     mu1_0: float
     sig1_0: float
-    
+
     # volatility of the world
     mu2_0: float
     sig2_0: float
 
     # model parameters
     eta: float  # volatility of random walk variance
-    s: float    # observation noise variance
+    s: float  # observation noise variance
 
     # Numerical stability
     min_var: float = 1e-8
@@ -48,22 +52,23 @@ class HGF2Config:
 
 class HGFPaper2Gaussian:
     """
-      2-level Gaussian HGF as in Markovic & Kiebel (2016):
-      x2_t = x2_{t-1} + sqrt(eta) * n
-      x1_t = x1_{t-1} + exp(x2_t/2) * n   -> Var = exp(x2_t)
-      o_t  = x1_t + sqrt(s) * n
+    2-level Gaussian HGF as in Markovic & Kiebel (2016):
+    x2_t = x2_{t-1} + sqrt(eta) * n
+    x1_t = x1_{t-1} + exp(x2_t/2) * n   -> Var = exp(x2_t)
+    o_t  = x1_t + sqrt(s) * n
     """
-    def __init__(self,
-                 eta: float,
-                 s: float, 
-                 mu1_init: float = 0.0,
-                 sig1_init: float = 1.0,
-                 mu2_init: float = 0.0,
-                 sig2_init: float = 1.0,
-                 min_var: float = 1e-8,
-                 exp_clip_value: float = 60.0
-                ):
-    
+
+    def __init__(
+        self,
+        eta: float,
+        s: float,
+        mu1_init: float = 0.0,
+        sig1_init: float = 1.0,
+        mu2_init: float = 0.0,
+        sig2_init: float = 1.0,
+        min_var: float = 1e-8,
+        exp_clip_value: float = 60.0,
+    ):
         self.cfg = HGF2Config(
             mu1_0=float(mu1_init),
             sig1_0=float(sig1_init),
@@ -99,16 +104,15 @@ class HGFPaper2Gaussian:
             "sig2_hat": [],
             "mu2": [],
             "sig2": [],
-            "omega": [],       # exp(mu2_hat)
+            "omega": [],  # exp(mu2_hat)
             "delta1": [],
             "alpha1": [],
             "delta2": [],
             "k": [],
             "r": [],
         }
-    
-    def update(self, o: Number) -> None:
 
+    def update(self, o: Number) -> None:
         o = float(o)
         minvar = self.cfg.min_var
 
@@ -145,10 +149,10 @@ class HGFPaper2Gaussian:
         # helper coefficients
         k = omega / den1
         r = (omega - sig1_prev) / den1
-            
+
         # precision
         pi2 = (1.0 / sig2_hat) + 0.5 * k * (k + r * delta2)
-        
+
         # posterior update
         sig2_new = 1.0 / max(pi2, minvar)
         mu2_new = mu2_hat + 0.5 * max(sig2_new, minvar) * k * delta2
@@ -174,13 +178,12 @@ class HGFPaper2Gaussian:
         self.history["k"].append(k)
         self.history["r"].append(r)
 
-
     def run(self, inputs: Iterable[Number]) -> dict[str, list[float]]:
         for o in inputs:
             self.update(o)
         return self.history
 
-# ---------- Plotting (adapted from plot_results in hgf/hgf3.py) ----------
+    # ---------- Plotting (adapted from plot_results in hgf/hgf3.py) ----------
     def plot_results(
         self,
         true_x1: Iterable[Number] | None = None,
@@ -238,29 +241,31 @@ class HGFPaper2Gaussian:
         plt.tight_layout()
         return fig
 
+
 # ============================================================
 # Sanity test: simulate data from the paper generative model
 # ============================================================
 
+
 def simulate_paper_environment(
-    T: int = 320,
-    eta_true: float = 0.05,      
-    s_true: float = 15.0**2,      
+    duration: int = 320,
+    eta_true: float = 0.05,
+    s_true: float = 15.0**2,
     x2_baseline: float = -4.0,
     burst_every: int = 100,
     burst_len: int = 8.0,
-    burst_add: float = 0.9,       
+    burst_add: float = 0.9,
     seed: int = 42,
 ):
     rng = np.random.default_rng(seed)
 
-    x2 = np.zeros(T, dtype=float)
-    x1 = np.zeros(T, dtype=float)
+    x2 = np.zeros(duration, dtype=float)
+    x1 = np.zeros(duration, dtype=float)
 
     x2[0] = x2_baseline
     x1[0] = 0.0
 
-    for t in range(1, T):
+    for t in range(1, duration):
         x2[t] = x2[t - 1] + np.sqrt(eta_true) * rng.standard_normal()
 
         if burst_every > 0 and (t % burst_every) < burst_len:
@@ -269,23 +274,25 @@ def simulate_paper_environment(
         # step std = exp(x2/2)
         x1[t] = x1[t - 1] + np.exp(x2[t] / 2.0) * rng.standard_normal()
 
-    o = x1 + np.sqrt(s_true) * rng.standard_normal(T)
+    o = x1 + np.sqrt(s_true) * rng.standard_normal(duration)
     return o, x1, x2
+
 
 def _demo_paper_hgf2():
     o, x1_true, x2_true = simulate_paper_environment()
 
     model = HGFPaper2Gaussian(
-        eta=0.005,          
+        eta=0.005,
         s=15.0**2,
         mu1_init=0.0,
         sig1_init=10.0,
-        mu2_init=-4.0,     # vicino a x2_baseline
+        mu2_init=-4.0,  # vicino a x2_baseline
         sig2_init=1.0,
     )
     model.run(o)
     model.plot_results(true_x1=x1_true, true_x2=x2_true)
     plt.show()
+
 
 if __name__ == "__main__":
     _demo_paper_hgf2()
