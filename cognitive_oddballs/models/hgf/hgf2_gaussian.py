@@ -244,11 +244,11 @@ class HGFPaper2Gaussian:
 
 def simulate_paper_environment(
     T: int = 320,
-    eta_true: float = 0.005,      
+    eta_true: float = 0.05,      
     s_true: float = 15.0**2,      
     x2_baseline: float = -4.0,
     burst_every: int = 100,
-    burst_len: int = 2.0,
+    burst_len: int = 8.0,
     burst_add: float = 0.9,       
     seed: int = 42,
 ):
