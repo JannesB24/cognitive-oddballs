@@ -535,3 +535,147 @@ def fast_sanity_check():
 
 if __name__ == "__main__":
     fast_sanity_check()
+
+
+
+# ONE-SHOT MODEL RECOVERY SCRIPT (PRINT-ONLY)
+
+
+def true_param_sampler(model_name: str):
+    """Sample true parameters across regimes."""
+    if model_name == "CPM":
+        w1 = np.random.uniform(0.01, 0.3)
+        w2 = np.random.choice([50.0, 200.0, 1000.0])
+        h  = np.random.uniform(0.01, 0.3)
+        return np.array([w1, w2, h])
+
+    if model_name == "HGF":
+        eta = 10 ** np.random.uniform(-4, -1)
+        s   = 10 ** np.random.uniform(np.log10(1.0), np.log10(50.0**2))
+        return np.array([eta, s])
+
+    raise KeyError(model_name)
+
+
+def run_many_simulations(
+    n_sims,
+    models,
+    true_param_sampler,
+    param_grids,
+    environment_fn,
+    n_trials,
+    sigma_r,
+    decision_rule="BIC",
+    seed=0,
+):
+    set_seed(seed)
+
+    model_names = list(models.keys())
+    winners = {tm: {fm: 0 for fm in model_names} for tm in model_names}
+    param_recovery = {m: [] for m in model_names}
+
+    for sim in range(n_sims):
+        true_params = {m: true_param_sampler(m) for m in model_names}
+
+        results = model_recovery_per_env(
+            models=models,
+            true_params=true_params,
+            param_grids=param_grids,
+            environment_fn=environment_fn,
+            n_trials=n_trials,
+            sigma_r=sigma_r,
+        )
+
+        for true_m in model_names:
+            scores = {}
+            for fit_m in model_names:
+                if decision_rule == "BIC":
+                    scores[fit_m] = results[true_m][fit_m]["MLE"]["BIC"]
+                else:
+                    scores[fit_m] = results[true_m][fit_m]["Bayesian"]["log_evidence"]
+
+            winner = min(scores, key=scores.get) if decision_rule == "BIC" else max(scores, key=scores.get)
+            winners[true_m][winner] += 1
+
+            if winner == true_m:
+                recovered = (
+                    results[true_m][true_m]["MLE"]["best_params"]
+                    if decision_rule == "BIC"
+                    else results[true_m][true_m]["Bayesian"]["MAP"]
+                )
+                param_recovery[true_m].append((true_params[true_m], recovered))
+
+    return winners, param_recovery
+
+
+def print_confusion_matrix(winners):
+    models = list(winners.keys())
+    print("\nCONFUSION MATRIX (rows=true, cols=recovered)")
+    print(" " * 12 + " ".join(f"{m:>8s}" for m in models))
+
+    for true_m in models:
+        row = winners[true_m]
+        total = sum(row.values())
+        props = [row[m] / max(total, 1) for m in models]
+        print(f"{true_m:>10s} | " + " ".join(f"{p:8.2f}" for p in props))
+
+
+def print_param_recovery_stats(param_recovery):
+    print("\nPARAMETER RECOVERY (only correctly identified fits)")
+
+    for model, pairs in param_recovery.items():
+        if len(pairs) == 0:
+            print(f"{model}: no correctly recovered simulations")
+            continue
+
+        true_p = np.vstack([p[0] for p in pairs])
+        rec_p  = np.vstack([p[1] for p in pairs])
+
+        print(f"\n{model}:")
+        for i in range(true_p.shape[1]):
+            r = np.corrcoef(true_p[:, i], rec_p[:, i])[0, 1]
+            print(f"  param {i}: corr(true, recovered) = {r: .2f}")
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+if __name__ == "__main__":
+    set_seed(1)
+
+    models = {
+        "CPM": ChangePointModelVariational,
+        "HGF": HGFPaper2Gaussian,
+    }
+
+    # ----- parameter grids -----
+    w1_grid = np.linspace(0.05, 0.5, 6)
+    w2_grid = np.array([50.0, 200.0, 1000.0])
+    h_grid  = np.linspace(0.01, 0.3, 6)
+    cpm_grid = np.array([(w1, w2, h) for w1 in w1_grid for w2 in w2_grid for h in h_grid])
+
+    eta_grid = np.logspace(-4, -1, 8)
+    s_grid   = np.logspace(np.log10(1.0), np.log10(50.0**2), 8)
+    hgf_grid = np.array([(e, s) for e in eta_grid for s in s_grid])
+
+    param_grids = {
+        "CPM": cpm_grid,
+        "HGF": hgf_grid,
+    }
+
+    winners, param_recovery = run_many_simulations(
+        n_sims=200,
+        models=models,
+        true_param_sampler=true_param_sampler,
+        param_grids=param_grids,
+        environment_fn=generate_change_point_environment,
+        n_trials=300,
+        sigma_r=5.0,
+        decision_rule="BIC",   # robust choice
+    )
+
+    print_confusion_matrix(winners)
+    print_param_recovery_stats(param_recovery)
+
+    print("\nModel recovery finished.")
