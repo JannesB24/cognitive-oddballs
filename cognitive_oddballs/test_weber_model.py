@@ -25,7 +25,7 @@ def compare_trajectories(m_1: Weber_model, m_2: Weber_model, node_idx: int, col_
     m1_df = m_1.to_pandas()
     m2_df = m_2.to_pandas()
 
-    if len(m1_df.columns) < ((node_idx+1)*6 +3) or len(m2_df.columns) < ((node_idx+1)*6 +3):
+    if len(m1_df.columns) < ((node_idx+1)*6 +4) or len(m2_df.columns) < ((node_idx+1)*6 +4):
         raise ValueError("Node with given Index must be present in both Models.")
     if col_to_compare not in accepted_columns:
         raise ValueError("col_to_compare must be one of the following: 'expected_mean','expected_precision','mean','precision','surprise'")
@@ -118,9 +118,9 @@ test_od_3node = Weber_model(oddball_data, node4=False)
 # print(surprise_comparison)
 
 ## comparing the three random walk environment models (with node 4 as volatility parent if there)
-surprise_comparison = compare_surprise([test_rw_low_p,test_rw_high_p,test_rw_3node])
-surprise_comparison["Model"] = ["test_rw_low_p","test_rw_high_p","test_rw_3node"]
-print(surprise_comparison)
+# surprise_comparison = compare_surprise([test_rw_low_p,test_rw_high_p,test_rw_3node])
+# surprise_comparison["Model"] = ["test_rw_low_p","test_rw_high_p","test_rw_3node"]
+# print(surprise_comparison)
 
 # ### comparing the precision trajectories of node 3
 #
@@ -146,7 +146,7 @@ print(surprise_comparison)
 # test_od_3node_df = test_od_3node.to_pandas()
 #
 # test_rw_n4_va_lp_df = test_rw_n4_va_lp.to_pandas()
-#test_rw_n4_va_hp_df = test_rw_n4_va_hp.to_pandas()
+# test_rw_n4_va_hp_df = test_rw_n4_va_hp.to_pandas()
 # test_od_n4_va_lp_df = test_od_n4_va_lp.to_pandas()
 # test_od_n4_va_hp_df = test_od_n4_va_hp.to_pandas()
 
@@ -157,7 +157,7 @@ print(surprise_comparison)
 # test_od_low_p.plot_trajectories()
 # test_rw_high_p.plot_trajectories()
 # test_od_high_p.plot_trajectories()
-#
+# #
 # test_rw_3node.plot_trajectories()
 # test_od_3node.plot_trajectories()
 #
