@@ -8,10 +8,10 @@ Based on Marković & Kiebel (2016)
 from collections.abc import Callable
 
 import numpy as np
-from environments.change_point_oddball import generate_change_point_environment
-from environments.random_walk_oddball import generate_random_walk_environment
-from models.change_point_model_variational import ChangePointModelVariational
-from models.hgf.hgf2_gaussian import HGFPaper2Gaussian
+from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
+from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
+from cognitive_oddballs.models.change_point_model_variational import ChangePointModelVariational
+from cognitive_oddballs.models.hgf.hgf2_gaussian import HGFPaper2Gaussian
 
 
 # TODO: What’s left to do for real model recovery
