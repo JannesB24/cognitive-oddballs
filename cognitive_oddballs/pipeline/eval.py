@@ -35,7 +35,6 @@ import pandas as pd
 from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
 from cognitive_oddballs.models.change_point_model_variational import ChangePointModelVariational
-from cognitive_oddballs.models.change_point_nassar_2016 import ChangePointNassarModel
 from cognitive_oddballs.models.hgf.hgf2_gaussian import HGFPaper2Gaussian
 from cognitive_oddballs.models.model import Model
 from cognitive_oddballs.models.weber_model import WeberModel
@@ -194,7 +193,9 @@ def run_experiment(
 
 def experiment_changepoint():
     models: dict[str, Model] = {
-        "CPM": ChangePointModelVariational(mu0=250, sigma0=50, obs_noise_std=25, w1_std=0.1, w2_std=30, h=0.1),
+        "CPM": ChangePointModelVariational(
+            mu0=250, sigma0=50, obs_noise_std=25, w1_std=0.1, w2_std=30, h=0.1
+        ),
         "gHGF": WeberModel(node4=True, node_4_type="volatility_parent", n4_p=3.0),
         "HGF": HGFPaper2Gaussian(
             eta=0.005, s=15.0**2, mu1_init=0.0, sig1_init=10.0, mu2_init=-4.0, sig2_init=1.0
@@ -221,7 +222,7 @@ def experiment_randomwalk():
             sigma0=25,
             obs_noise_std=25,
             w1_std=3.16,  # Higher drift for random walk
-            w2_std=30, # Does not matter for RW
+            w2_std=30,  # Does not matter for RW
             h=0.1,
             add_second_level=True,
         ),

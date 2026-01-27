@@ -95,17 +95,8 @@ class ChangePointModelVariational(Model):
     >>> print(results[['Trial', 'Belief', 'LearningRate']].head())
     """
 
-    def __init__(
-        self,
-        mu0: float,
-        sigma0: float,
-        obs_noise_std: float,  # std dev
-        w1_std: float,  # std dev
-        w2_std: float,  # std dev
-        h: float,
-        add_second_level: bool = True,
-    ) -> None:
-        # Perceptual free parameters
+    def __init__(self, mu0, sigma0, obs_noise, w1, w2, h, add_second_level=True):
+        # ===== Perceptual free parameters =====
         self.mu0 = mu0  # μ₀¹ - Initial belief
         self.sigma0 = sigma0  # σ₀¹ - Initial uncertainty
         self.obs_noise = obs_noise_std  # s - Observation noise (std dev)
@@ -131,7 +122,7 @@ class ChangePointModelVariational(Model):
             self.mu2 = 0.0  # μ^(2) - Volatility (log-odds of Ω)
             self.sigma2 = 1.0  # σ^(2) - Second-level uncertainty
 
-        # History tracking
+        # ===== History tracking =====
         columns = [
             "beliefs",  # μ^(1)
             "prediction_errors",  # δ_t
@@ -147,8 +138,15 @@ class ChangePointModelVariational(Model):
                     "epsilon2",  # ε^(2) - Second-level prediction error
                     "alpha2",  # α^(2) - Second-level learning rate
                 ]
+            columns.extend(
+                [
+                    "mu2",  # μ^(2)
+                    "epsilon2",  # ε^(2) - Second-level prediction error
+                    "alpha2",  # α^(2) - Second-level learning rate
+                ]
             )
 
+        self.history = pd.DataFrame(columns=columns)
         self.history = pd.DataFrame(columns=columns)
 
     # --------------------------------------------------
