@@ -62,6 +62,42 @@ def log_likelihood(predictions: np.ndarray, targets: np.ndarray, noise_std: floa
     residuals = targets - predictions
     return -0.5 * np.sum((residuals / noise_std) ** 2 + np.log(2 * np.pi * noise_std**2))
 
+def calculate_trial_gaussian_vfe(o_t, mu_pred, var_pred, obs_noise_var):
+    """
+    For linear-Gaussian filtering models ELBO reduces to:
+    F_t $\approx$ log p(o_t | O_{t-1})
+    --> need to calculate p(stimulus | past_observations, \theta)
+    BUT this solution would need the models to make variance predictions, which I'm not sure they do?
+    assumes:
+    - stimulus o_t
+    - model's prior predictive mean mu_pred
+    - models prior predictive variance var_pred
+    - observation noise variance \sigma_{obs}^2
+    """
+    
+    total_var = var_pred + obs_noise_var # can i get that with self.sigma?
+    trial_vfe = -0.5 * ((o_t - mu_pred) ** 2 / total_var + np.log(2 * np.pi + total_var))
+
+    return trial_vfe
+
+def calculate_sequence_gaussian_vfe(obs, mu_preds, var_preds, obs_noise_var):
+    """
+    Sum of trial-wise free energies over the whole sequence
+
+    The variational free energy provides the lower bound on the marginal log-likelihood 
+    Expect higher likelihood (lower surprise) -- hence, better performance -- for the sensory stimuli that was generated from the same process that
+    defines the corresponding perceptual model
+    F is thus always <= true log evidence 
+    """
+    obs = np.asarray(obs)
+    mu_preds = np.asarray(mu_preds)
+    var_preds = np.asarray(var_preds)
+
+    trial_vfe = calculate_trial_gaussian_vfe(obs, mu_preds, var_preds, obs_noise_var)
+
+    # reurn both total vfe and per trial vfe
+    return np.sum(trial_vfe), trial_vfe
+
 
 def compute_apparent_learning_rate(updates, prediction_errors):
     """
