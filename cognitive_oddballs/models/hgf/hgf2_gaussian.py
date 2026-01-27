@@ -4,7 +4,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 import numpy as np
+import pandas as pd
 from matplotlib import pyplot as plt
+
+from cognitive_oddballs.models.model import Model
 
 Number = int | float | np.number
 
@@ -23,6 +26,7 @@ def sigmoid_stable(x: Number) -> float:
     else:
         z = np.exp(x)
         return float(z / (1.0 + z))
+
 
 @dataclass
 class HGF2Config:
@@ -44,7 +48,7 @@ class HGF2Config:
     exp_clip_value: float = 30.0
 
 
-class HGFPaper2Gaussian:
+class HGFPaper2Gaussian(Model):
     """
     2-level Gaussian HGF as in Markovic & Kiebel (2016):
     x2_t = x2_{t-1} + sqrt(eta) * n
@@ -172,10 +176,15 @@ class HGFPaper2Gaussian:
         self.history["k"].append(k)
         self.history["r"].append(r)
 
-    def run(self, inputs: Iterable[Number]) -> dict[str, list[float]]:
-        for o in inputs:
-            self.update(o)
-        return self.history
+    def run(self, observations: np.ndarray) -> pd.DataFrame:
+        for x in observations:
+            self.update(x)
+
+        output = self.history[["x_0_expected_mean"]]
+
+        rename_dict = {"x_0_expected_mean": "raw_responses"}
+
+        return output.rename(columns=rename_dict)
 
     # ---------- Plotting (adapted from plot_results in hgf/hgf3.py) ----------
     def plot_results(
