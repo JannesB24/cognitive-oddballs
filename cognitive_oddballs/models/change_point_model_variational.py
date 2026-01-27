@@ -23,8 +23,12 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
+from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
+from cognitive_oddballs.models.model import Model
 
-class ChangePointModelVariational:
+
+class ChangePointModelVariational(Model):
     """
     Change Point Model using Variational Bayesian Inference.
 
@@ -88,11 +92,7 @@ class ChangePointModelVariational:
     >>> print(results[['Trial', 'Belief', 'LearningRate']].head())
     """
 
-    def __init__(self, x, mu0, sigma0, obs_noise, w1, w2, h, add_second_level=True):
-        # Observations
-        self.x = np.asarray(x)
-        self.n_trials = len(x)
-
+    def __init__(self, mu0, sigma0, obs_noise, w1, w2, h, add_second_level=True):
         # ===== Perceptual free parameters =====
         self.mu0 = mu0  # μ₀¹ - Initial belief
         self.sigma0 = sigma0  # σ₀¹ - Initial uncertainty
@@ -112,24 +112,24 @@ class ChangePointModelVariational:
             self.sigma2 = 1.0  # σ^(2) - Second-level uncertainty
 
         # ===== History tracking =====
-        history_dict = {
-            "beliefs": [],  # μ^(1)
-            "prediction_errors": [],  # δ_t
-            "learning_rates": [],  # α^(1)
-            "uncertainties": [],  # σ^(1)
-            "change_point_probs": [],  # Ω_t
-        }
+        columns = [
+            "beliefs",  # μ^(1)
+            "prediction_errors",  # δ_t
+            "learning_rates",  # α^(1)
+            "uncertainties",  # σ^(1)
+            "change_point_probs",  # Ω_t
+        ]
 
         if add_second_level:
-            history_dict.update(
-                {
-                    "mu2": [],  # μ^(2)
-                    "epsilon2": [],  # ε^(2) - Second-level prediction error
-                    "alpha2": [],  # α^(2) - Second-level learning rate
-                }
+            columns.extend(
+                [
+                    "mu2",  # μ^(2)
+                    "epsilon2",  # ε^(2) - Second-level prediction error
+                    "alpha2",  # α^(2) - Second-level learning rate
+                ]
             )
 
-        self.history = history_dict
+        self.history = pd.DataFrame(columns=columns)
 
     # --------------------------------------------------
     # Second-level transformations (for HGF comparability)
@@ -229,7 +229,7 @@ class ChangePointModelVariational:
 
     # --------------------------------------------------
 
-    def update(self, t):
+    def update(self, observation: float):
         """
         Single-trial variational update following Marković & Kiebel (2016).
 
@@ -250,7 +250,7 @@ class ChangePointModelVariational:
             Trial index
         """
         # 1. Prediction error
-        delta = self.x[t] - self.mu
+        delta = observation - self.mu
 
         # 2. Change-point probability (Bayes rule)
         omega = self._change_point_probability(delta)
@@ -274,9 +274,7 @@ class ChangePointModelVariational:
         if self.add_second_level:
             # Get previous change-point probability
             omega_prev = (
-                self.history["change_point_probs"][-1]
-                if len(self.history["change_point_probs"]) > 0
-                else omega
+                self.history["change_point_probs"].iloc[-1] if len(self.history) > 0 else omega
             )
 
             # Convert to log-odds space
@@ -303,20 +301,28 @@ class ChangePointModelVariational:
 
     def _store_history(self, delta, omega, alpha, epsilon2=0.0, alpha2=0.0):
         """Store trial results in history."""
-        self.history["beliefs"].append(self.mu)
-        self.history["prediction_errors"].append(delta)
-        self.history["learning_rates"].append(alpha)
-        self.history["uncertainties"].append(self.sigma)
-        self.history["change_point_probs"].append(omega)
+        row_data = {
+            "beliefs": self.mu,
+            "prediction_errors": delta,
+            "learning_rates": alpha,
+            "uncertainties": self.sigma,
+            "change_point_probs": omega,
+        }
 
         if self.add_second_level:
-            self.history["mu2"].append(self.mu2)
-            self.history["epsilon2"].append(epsilon2)
-            self.history["alpha2"].append(alpha2)
+            row_data.update(
+                {
+                    "mu2": self.mu2,
+                    "epsilon2": epsilon2,
+                    "alpha2": alpha2,
+                }
+            )
+
+        self.history = pd.concat([self.history, pd.DataFrame([row_data])], ignore_index=True)
 
     # --------------------------------------------------
 
-    def run(self, mu_true=None):
+    def run(self, observations: np.ndarray) -> pd.DataFrame:
         """
         Run the CPM on the full observation sequence.
 
@@ -342,62 +348,80 @@ class ChangePointModelVariational:
             - Epsilon2: Second-level prediction error (ε^(2))
             - Alpha2: Second-level learning rate (α^(2))
         """
-        # Reset states
-        self.mu = self.mu0
-        self.sigma = self.sigma0
-
         if self.add_second_level:
             self.mu2 = 0.0
             self.sigma2 = 1.0
 
         # Initialize history with first trial (no update)
-        self.history = {
-            "beliefs": [self.mu],
-            "prediction_errors": [0.0],
-            "learning_rates": [0.0],
-            "uncertainties": [self.sigma],
-            "change_point_probs": [0.0],
+        initial_data = {
+            "beliefs": self.mu,
+            "prediction_errors": 0.0,
+            "learning_rates": 0.0,
+            "uncertainties": self.sigma,
+            "change_point_probs": 0.0,
         }
 
         if self.add_second_level:
-            self.history.update(
+            initial_data.update(
                 {
-                    "mu2": [self.mu2],
-                    "epsilon2": [0.0],
-                    "alpha2": [0.0],
+                    "mu2": self.mu2,
+                    "epsilon2": 0.0,
+                    "alpha2": 0.0,
                 }
             )
+
+        self.history = pd.DataFrame([initial_data])
 
         # Run updates for trials 1 to T-1
-        for t in range(1, self.n_trials):
-            self.update(t)
+        for t in range(1, len(observations)):
+            self.update(observations[t])
 
         # Create output DataFrame
-        df_dict = {
-            "Trial": np.arange(1, self.n_trials + 1),
-            "BagDrop": self.x,
-            "Belief": self.history["beliefs"],
-            "CPP": self.history["change_point_probs"],
-            "Uncertainty": self.history["uncertainties"],
-            "LearningRate": self.history["learning_rates"],
-            "PredictionError": self.history["prediction_errors"],
-        }
+        # df_dict = {
+        #     "Trial": np.arange(1, len(observations) + 1),
+        #     "BagDrop": observations,
+        #     "Belief": self.history["beliefs"].values,
+        #     "CPP": self.history["change_point_probs"].values,
+        #     "Uncertainty": self.history["uncertainties"].values,
+        #     "LearningRate": self.history["learning_rates"].values,
+        #     "PredictionError": self.history["prediction_errors"].values,
+        # }
 
-        if self.add_second_level:
-            df_dict.update(
-                {
-                    "Mu2": self.history["mu2"],
-                    "Epsilon2": self.history["epsilon2"],
-                    "Alpha2": self.history["alpha2"],
-                }
-            )
+        # if self.add_second_level:
+        #     df_dict.update(
+        #         {
+        #             "Mu2": self.history["mu2"].values,
+        #             "Epsilon2": self.history["epsilon2"].values,
+        #             "Alpha2": self.history["alpha2"].values,
+        #         }
+        #     )
 
-        df = pd.DataFrame(df_dict)
+        # df = pd.DataFrame(df_dict)
 
-        if mu_true is not None:
-            df.insert(1, "TruePosition", mu_true)
+        # beliefs (Nassar: Belief; Weber: x_0_expected_mean)
+        # observations/targets (location bag drops: Nassar: BagDrop; Weber: x_0_mean; for all models, depends on environment)
+        # responses (are computed in eval)
+        # prediction_errors (Nassar: PredictionError, Weber: x_0_prediction_error)
+        # updates (new belief; Nassar: Belief of t+1; Weber: x_0_expected_mean of t+1)
+        # log_likelihood (computed in eval)
 
-        return df
+        output_columns = [
+            # "Beliefs",
+            # "Prediction Errors",
+            # "Updates",
+            # "Log Likelihoods",
+        ]
+
+        output = self.history[["beliefs"]]
+
+        rename_dict = {"beliefs": "raw_responses"}
+
+        # output["Beliefs"] = self.history["beliefs"].values
+        # output["Prediction Errors"] = self.history["prediction_errors"].values
+        # output["Updates"] = self.history["beliefs"].shift(-1).values
+        # output["Log Likelihoods"] = self.history["change_point_probs"].values
+
+        return output.rename(columns=rename_dict)
 
     # --------------------------------------------------
     # Visualization
@@ -508,11 +532,6 @@ class ChangePointModelVariational:
 
 
 if __name__ == "__main__":
-    from environments.change_point_oddball import (
-        generate_change_point_environment,
-    )
-    from environments.random_walk_oddball import generate_random_walk_environment
-
     print("=" * 60)
     print("Testing ChangePointModel_Variational (CPM 2016 Adjusted)")
     print("=" * 60)

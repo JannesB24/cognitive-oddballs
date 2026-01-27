@@ -4,15 +4,16 @@ MLE-BIC vs Bayesian Inference (Laplace Approximation)
 
 Based on Marković & Kiebel (2016)
 """
+
 # Imports
 from collections.abc import Callable
 
 import numpy as np
+
 from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
 from cognitive_oddballs.models.change_point_model_variational import ChangePointModelVariational
 from cognitive_oddballs.models.hgf.hgf2_gaussian import HGFPaper2Gaussian
-
 
 # TODO: What’s left to do for real model recovery
 
@@ -65,6 +66,7 @@ def model_n_params(model_cls) -> int:
         return 2
     raise AttributeError(f"Unknown n_params for {model_cls.__name__}")
 
+
 def safe_log_prior(model, params) -> float:
     """
     If model has log_prior(): use it.
@@ -75,11 +77,15 @@ def safe_log_prior(model, params) -> float:
         return float(lp_fn(params))
     return 0.0
 
+
 def set_seed(seed: int = 42):
     np.random.seed(seed)
 
-# Model constructor function 
-def make_model(model_cls, params, observations, *, obs_noise=25.0, sigma0=25.0, add_second_level=True):
+
+# Model constructor function
+def make_model(
+    model_cls, params, observations, *, obs_noise=25.0, sigma0=25.0, add_second_level=True
+):
     if model_cls.__name__ == "ChangePointModelVariational":
         params = np.asarray(params, dtype=float).ravel()
         if params.size != 3:
@@ -100,6 +106,7 @@ def make_model(model_cls, params, observations, *, obs_noise=25.0, sigma0=25.0, 
         )
     # HGF (eta, s)
     return model_cls(*params)
+
 
 # Environments output normalization
 def get_observations(env_out):
@@ -138,8 +145,11 @@ def get_observations(env_out):
         arr = arr[:, 0]
     return arr.ravel()
 
-# Model constructor function 
-def make_model(model_cls, params, observations, *, obs_noise=25.0, sigma0=25.0, add_second_level=True):
+
+# Model constructor function
+def make_model(
+    model_cls, params, observations, *, obs_noise=25.0, sigma0=25.0, add_second_level=True
+):
     if model_cls.__name__ == "ChangePointModelVariational":
         params = np.asarray(params, dtype=float).ravel()
         if params.size != 3:
@@ -160,6 +170,7 @@ def make_model(model_cls, params, observations, *, obs_noise=25.0, sigma0=25.0, 
         )
     # HGF (eta, s)
     return model_cls(*params)
+
 
 # Environments output normalization
 def get_observations(env_out):
@@ -201,6 +212,7 @@ def get_observations(env_out):
 
 # Response likelihood
 
+
 def response_log_likelihood(responses, beliefs, sigma_r):
     """
     log p(r_t | mu_t, sigma_r) with r_t ~ Normal(mu_t, sigma_r^2)
@@ -212,16 +224,16 @@ def response_log_likelihood(responses, beliefs, sigma_r):
     beliefs = np.asarray(beliefs)
     sigma_r = np.asarray(sigma_r)
 
-    if np.any(sigma_r<=0):
+    if np.any(sigma_r <= 0):
         return -np.inf
-    
+
     responses = np.asarray(responses)
     beliefs = np.asarray(beliefs)
     sigma_r = np.asarray(sigma_r)
 
-    if np.any(sigma_r<=0):
+    if np.any(sigma_r <= 0):
         return -np.inf
-    
+
     residuals = responses - beliefs
     var = sigma_r**2
     var = sigma_r**2
@@ -229,9 +241,13 @@ def response_log_likelihood(responses, beliefs, sigma_r):
     return -0.5 * np.sum((residuals**2) / var + np.log(2 * np.pi * var))
     return -0.5 * np.sum((residuals**2) / var + np.log(2 * np.pi * var))
 
+
 # Core simulation loop
 
-def run_model_on_environment(model, observations, sigma_r, generate_responses=True, fixed_responses=None):
+
+def run_model_on_environment(
+    model, observations, sigma_r, generate_responses=True, fixed_responses=None
+):
     if (not generate_responses) and (fixed_responses is None):
         raise ValueError("fixed_responses must be provided when generate_responses=False")
 
@@ -259,7 +275,9 @@ def run_model_on_environment(model, observations, sigma_r, generate_responses=Tr
         mu = float(model.mu)
         beliefs[0] = mu
         prediction_errors[0] = observations[0] - mu
-        responses[0] = (mu + np.random.randn() * sigma_r) if generate_responses else float(fixed_responses[0])
+        responses[0] = (
+            (mu + np.random.randn() * sigma_r) if generate_responses else float(fixed_responses[0])
+        )
 
         # trials 1..T-1: predict = current mu (from previous posterior), then update(t)
         for t in range(1, len(observations)):
@@ -270,7 +288,11 @@ def run_model_on_environment(model, observations, sigma_r, generate_responses=Tr
             model.update(t)  # CPM update uses index t :contentReference[oaicite:7]{index=7}
             # you can optionally expose "last_update" later; for now keep NaN
 
-            responses[t] = (mu + np.random.randn() * sigma_r) if generate_responses else float(fixed_responses[t])
+            responses[t] = (
+                (mu + np.random.randn() * sigma_r)
+                if generate_responses
+                else float(fixed_responses[t])
+            )
 
         return {
             "beliefs": beliefs,
@@ -288,7 +310,11 @@ def run_model_on_environment(model, observations, sigma_r, generate_responses=Tr
             prediction_errors[t] = float(obs) - mu
 
             model.update(obs)
-def run_model_on_environment(model, observations, sigma_r, generate_responses=True, fixed_responses=None):
+
+
+def run_model_on_environment(
+    model, observations, sigma_r, generate_responses=True, fixed_responses=None
+):
     if (not generate_responses) and (fixed_responses is None):
         raise ValueError("fixed_responses must be provided when generate_responses=False")
 
@@ -316,7 +342,9 @@ def run_model_on_environment(model, observations, sigma_r, generate_responses=Tr
         mu = float(model.mu)
         beliefs[0] = mu
         prediction_errors[0] = observations[0] - mu
-        responses[0] = (mu + np.random.randn() * sigma_r) if generate_responses else float(fixed_responses[0])
+        responses[0] = (
+            (mu + np.random.randn() * sigma_r) if generate_responses else float(fixed_responses[0])
+        )
 
         # trials 1..T-1: predict = current mu (from previous posterior), then update(t)
         for t in range(1, len(observations)):
@@ -327,7 +355,11 @@ def run_model_on_environment(model, observations, sigma_r, generate_responses=Tr
             model.update(t)  # CPM update uses index t :contentReference[oaicite:7]{index=7}
             # you can optionally expose "last_update" later; for now keep NaN
 
-            responses[t] = (mu + np.random.randn() * sigma_r) if generate_responses else float(fixed_responses[t])
+            responses[t] = (
+                (mu + np.random.randn() * sigma_r)
+                if generate_responses
+                else float(fixed_responses[t])
+            )
 
         return {
             "beliefs": beliefs,
@@ -346,8 +378,16 @@ def run_model_on_environment(model, observations, sigma_r, generate_responses=Tr
 
             model.update(obs)
 
-            responses[t] = (mu + np.random.randn() * sigma_r) if generate_responses else float(fixed_responses[t])
-            responses[t] = (mu + np.random.randn() * sigma_r) if generate_responses else float(fixed_responses[t])
+            responses[t] = (
+                (mu + np.random.randn() * sigma_r)
+                if generate_responses
+                else float(fixed_responses[t])
+            )
+            responses[t] = (
+                (mu + np.random.randn() * sigma_r)
+                if generate_responses
+                else float(fixed_responses[t])
+            )
 
         return {
             "beliefs": beliefs,
@@ -357,6 +397,7 @@ def run_model_on_environment(model, observations, sigma_r, generate_responses=Tr
         }
 
     raise TypeError(f"Unsupported model interface: {type(model)}")
+
 
 # MLE grid search + BIC
 
@@ -531,8 +572,10 @@ def model_recovery_per_env(
 
     return results
 
+
 # Experiment Wrappers
 # Experiment Wrappers
+
 
 def modelrec_changepoint():
     models = {"CPM": ChangePointModelVariational, "HGF": HGFPaper2Gaussian}
@@ -541,32 +584,38 @@ def modelrec_changepoint():
     # ---- True params must match make_model() ordering ----
     # CPM expects (w1, w2, h) after x (and possibly others depending on your __init__)
     true_params = {
-        "CPM": np.array([0.01, 1000.0, 0.1]),  # w1 small, w2 large, hazard moderate,          # w1, w2, h  (example)
-        "HGF": np.array([0.05, 15.0**2]),          # eta, s     (example)
+        "CPM": np.array(
+            [0.01, 1000.0, 0.1]
+        ),  # w1 small, w2 large, hazard moderate,          # w1, w2, h  (example)
+        "HGF": np.array([0.05, 15.0**2]),  # eta, s     (example)
     }
 
     # ---- Param grids ----
     w1_grid = np.linspace(0.05, 0.5, 6)
     w2_grid = np.array([50.0, 200.0, 1000.0])
-    h_grid  = np.linspace(0.01, 0.3, 6)
+    h_grid = np.linspace(0.01, 0.3, 6)
     param_grids = {
-        "CPM": np.array([(w1, w2, h) for w1 in w1_grid for w2 in w2_grid for h in h_grid], dtype=float)
+        "CPM": np.array(
+            [(w1, w2, h) for w1 in w1_grid for w2 in w2_grid for h in h_grid], dtype=float
+        )
     }
 
     eta_grid = np.logspace(-4, -1, 8)
-    s_grid   = np.logspace(np.log10(1.0), np.log10(50.0**2), 8)
+    s_grid = np.logspace(np.log10(1.0), np.log10(50.0**2), 8)
     param_grids["HGF"] = np.array([(e, s) for e in eta_grid for s in s_grid], dtype=float)
 
     # ---- Param grids ----
     w1_grid = np.linspace(0.05, 0.5, 6)
     w2_grid = np.array([50.0, 200.0, 1000.0])
-    h_grid  = np.linspace(0.01, 0.3, 6)
+    h_grid = np.linspace(0.01, 0.3, 6)
     param_grids = {
-        "CPM": np.array([(w1, w2, h) for w1 in w1_grid for w2 in w2_grid for h in h_grid], dtype=float)
+        "CPM": np.array(
+            [(w1, w2, h) for w1 in w1_grid for w2 in w2_grid for h in h_grid], dtype=float
+        )
     }
 
     eta_grid = np.logspace(-4, -1, 8)
-    s_grid   = np.logspace(np.log10(1.0), np.log10(50.0**2), 8)
+    s_grid = np.logspace(np.log10(1.0), np.log10(50.0**2), 8)
     param_grids["HGF"] = np.array([(e, s) for e in eta_grid for s in s_grid], dtype=float)
 
     return model_recovery_per_env(
@@ -588,15 +637,19 @@ def modelrec_randomwalk():
 
     w1_grid = np.linspace(0.05, 0.5, 6)
     w2_grid = np.array([50.0, 200.0, 1000.0])
-    h_grid  = np.linspace(0.01, 0.3, 6)
+    h_grid = np.linspace(0.01, 0.3, 6)
     param_grids = {
-        "CPM": np.array([(w1, w2, h) for w1 in w1_grid for w2 in w2_grid for h in h_grid], dtype=float)
+        "CPM": np.array(
+            [(w1, w2, h) for w1 in w1_grid for w2 in w2_grid for h in h_grid], dtype=float
+        )
     }
     w1_grid = np.linspace(0.05, 0.5, 6)
     w2_grid = np.array([50.0, 200.0, 1000.0])
-    h_grid  = np.linspace(0.01, 0.3, 6)
+    h_grid = np.linspace(0.01, 0.3, 6)
     param_grids = {
-        "CPM": np.array([(w1, w2, h) for w1 in w1_grid for w2 in w2_grid for h in h_grid], dtype=float)
+        "CPM": np.array(
+            [(w1, w2, h) for w1 in w1_grid for w2 in w2_grid for h in h_grid], dtype=float
+        )
     }
 
     return model_recovery_per_env(
@@ -608,6 +661,7 @@ def modelrec_randomwalk():
         sigma_r=5.0,
     )
 
+
 # Fast sanity check
 # what this sanity check is for?
 # This run is not meant to prove model recovery yet.
@@ -616,6 +670,7 @@ def modelrec_randomwalk():
 # Can each model fit its own data?
 # Can each model fail badly on the other model’s data?
 # Do the model comparison scores reflect that?
+
 
 # all answers are yes according to the last run
 def fast_sanity_check():
@@ -638,17 +693,19 @@ def fast_sanity_check():
     # True params (just placeholders for sanity)
     true_params = {
         "CPM": np.array([0.01, 1000.0, 0.1]),  # w1 small, w2 large, hazard moderate
-        "HGF": np.array([0.05, 15.0**2]),       # eta, s (variance)
+        "HGF": np.array([0.05, 15.0**2]),  # eta, s (variance)
     }
 
     # Tiny grids (2–3 values each)
     w1_grid = np.array([0.01, 0.1])
     w2_grid = np.array([100.0, 1000.0])
-    h_grid  = np.array([0.05, 0.15])
-    cpm_grid = np.array([(w1, w2, h) for w1 in w1_grid for w2 in w2_grid for h in h_grid], dtype=float)
+    h_grid = np.array([0.05, 0.15])
+    cpm_grid = np.array(
+        [(w1, w2, h) for w1 in w1_grid for w2 in w2_grid for h in h_grid], dtype=float
+    )
 
     eta_grid = np.array([1e-3, 1e-2])
-    s_grid   = np.array([5.0**2, 15.0**2])
+    s_grid = np.array([5.0**2, 15.0**2])
     hgf_grid = np.array([(e, s) for e in eta_grid for s in s_grid], dtype=float)
 
     param_grids = {"CPM": cpm_grid, "HGF": hgf_grid}
@@ -673,7 +730,9 @@ def fast_sanity_check():
             print(f"\n--- Generating with {true_name} ---")
 
             true_model = make_model(true_model_cls, true_params[true_name], observations)
-            synth = run_model_on_environment(true_model, observations, sigma_r, generate_responses=True)
+            synth = run_model_on_environment(
+                true_model, observations, sigma_r, generate_responses=True
+            )
             responses = synth["responses"]
 
             for fit_name, fit_model_cls in models.items():
@@ -684,7 +743,9 @@ def fast_sanity_check():
                 k = model_n_params(fit_model_cls)
                 bic = calculate_bic(k, n_trials, best_ll)
 
-                msg = f"fit={fit_name:3s} | ll={best_ll: .2f} | bic={bic: .2f} | params={best_params}"
+                msg = (
+                    f"fit={fit_name:3s} | ll={best_ll: .2f} | bic={bic: .2f} | params={best_params}"
+                )
                 if not do_laplace:
                     print(msg)
                     continue
@@ -694,13 +755,19 @@ def fast_sanity_check():
                     fit_model_cls, param_grids[fit_name], observations, responses, sigma_r
                 )
                 hessian = estimate_hessian(
-                    fit_model_cls, np.asarray(map_params), observations, responses, sigma_r, eps=1e-4
+                    fit_model_cls,
+                    np.asarray(map_params),
+                    observations,
+                    responses,
+                    sigma_r,
+                    eps=1e-4,
                 )
                 log_evidence = laplace_model_evidence(logpost, hessian, k)
                 print(msg + f" | logev={log_evidence: .2f}")
 
     print("\nSanity check finished.")
 
+
 # Fast sanity check
 # what this sanity check is for?
 # This run is not meant to prove model recovery yet.
@@ -709,6 +776,7 @@ def fast_sanity_check():
 # Can each model fit its own data?
 # Can each model fail badly on the other model’s data?
 # Do the model comparison scores reflect that?
+
 
 # all answers are yes according to the last run
 def fast_sanity_check():
@@ -731,17 +799,19 @@ def fast_sanity_check():
     # True params (just placeholders for sanity)
     true_params = {
         "CPM": np.array([0.01, 1000.0, 0.1]),  # w1 small, w2 large, hazard moderate
-        "HGF": np.array([0.05, 15.0**2]),       # eta, s (variance)
+        "HGF": np.array([0.05, 15.0**2]),  # eta, s (variance)
     }
 
     # Tiny grids (2–3 values each)
     w1_grid = np.array([0.01, 0.1])
     w2_grid = np.array([100.0, 1000.0])
-    h_grid  = np.array([0.05, 0.15])
-    cpm_grid = np.array([(w1, w2, h) for w1 in w1_grid for w2 in w2_grid for h in h_grid], dtype=float)
+    h_grid = np.array([0.05, 0.15])
+    cpm_grid = np.array(
+        [(w1, w2, h) for w1 in w1_grid for w2 in w2_grid for h in h_grid], dtype=float
+    )
 
     eta_grid = np.array([1e-3, 1e-2])
-    s_grid   = np.array([5.0**2, 15.0**2])
+    s_grid = np.array([5.0**2, 15.0**2])
     hgf_grid = np.array([(e, s) for e in eta_grid for s in s_grid], dtype=float)
 
     param_grids = {"CPM": cpm_grid, "HGF": hgf_grid}
@@ -766,7 +836,9 @@ def fast_sanity_check():
             print(f"\n--- Generating with {true_name} ---")
 
             true_model = make_model(true_model_cls, true_params[true_name], observations)
-            synth = run_model_on_environment(true_model, observations, sigma_r, generate_responses=True)
+            synth = run_model_on_environment(
+                true_model, observations, sigma_r, generate_responses=True
+            )
             responses = synth["responses"]
 
             for fit_name, fit_model_cls in models.items():
@@ -777,7 +849,9 @@ def fast_sanity_check():
                 k = model_n_params(fit_model_cls)
                 bic = calculate_bic(k, n_trials, best_ll)
 
-                msg = f"fit={fit_name:3s} | ll={best_ll: .2f} | bic={bic: .2f} | params={best_params}"
+                msg = (
+                    f"fit={fit_name:3s} | ll={best_ll: .2f} | bic={bic: .2f} | params={best_params}"
+                )
                 if not do_laplace:
                     print(msg)
                     continue
@@ -787,7 +861,12 @@ def fast_sanity_check():
                     fit_model_cls, param_grids[fit_name], observations, responses, sigma_r
                 )
                 hessian = estimate_hessian(
-                    fit_model_cls, np.asarray(map_params), observations, responses, sigma_r, eps=1e-4
+                    fit_model_cls,
+                    np.asarray(map_params),
+                    observations,
+                    responses,
+                    sigma_r,
+                    eps=1e-4,
                 )
                 log_evidence = laplace_model_evidence(logpost, hessian, k)
                 print(msg + f" | logev={log_evidence: .2f}")
@@ -802,7 +881,6 @@ if __name__ == "__main__":
     fast_sanity_check()
 
 
-
 # ONE-SHOT MODEL RECOVERY SCRIPT (PRINT-ONLY)
 
 
@@ -811,12 +889,12 @@ def true_param_sampler(model_name: str):
     if model_name == "CPM":
         w1 = np.random.uniform(0.01, 0.3)
         w2 = np.random.choice([50.0, 200.0, 1000.0])
-        h  = np.random.uniform(0.01, 0.3)
+        h = np.random.uniform(0.01, 0.3)
         return np.array([w1, w2, h])
 
     if model_name == "HGF":
         eta = 10 ** np.random.uniform(-4, -1)
-        s   = 10 ** np.random.uniform(np.log10(1.0), np.log10(50.0**2))
+        s = 10 ** np.random.uniform(np.log10(1.0), np.log10(50.0**2))
         return np.array([eta, s])
 
     raise KeyError(model_name)
@@ -836,7 +914,7 @@ def run_many_simulations(
     set_seed(seed)
 
     model_names = list(models.keys())
-    winners = {tm: {fm: 0 for fm in model_names} for tm in model_names}
+    winners = {tm: dict.fromkeys(model_names, 0) for tm in model_names}
     param_recovery = {m: [] for m in model_names}
 
     for sim in range(n_sims):
@@ -859,7 +937,11 @@ def run_many_simulations(
                 else:
                     scores[fit_m] = results[true_m][fit_m]["Bayesian"]["log_evidence"]
 
-            winner = min(scores, key=scores.get) if decision_rule == "BIC" else max(scores, key=scores.get)
+            winner = (
+                min(scores, key=scores.get)
+                if decision_rule == "BIC"
+                else max(scores, key=scores.get)
+            )
             winners[true_m][winner] += 1
 
             if winner == true_m:
@@ -894,7 +976,7 @@ def print_param_recovery_stats(param_recovery):
             continue
 
         true_p = np.vstack([p[0] for p in pairs])
-        rec_p  = np.vstack([p[1] for p in pairs])
+        rec_p = np.vstack([p[1] for p in pairs])
 
         print(f"\n{model}:")
         for i in range(true_p.shape[1]):
@@ -917,11 +999,11 @@ if __name__ == "__main__":
     # ----- parameter grids -----
     w1_grid = np.linspace(0.05, 0.5, 6)
     w2_grid = np.array([50.0, 200.0, 1000.0])
-    h_grid  = np.linspace(0.01, 0.3, 6)
+    h_grid = np.linspace(0.01, 0.3, 6)
     cpm_grid = np.array([(w1, w2, h) for w1 in w1_grid for w2 in w2_grid for h in h_grid])
 
     eta_grid = np.logspace(-4, -1, 8)
-    s_grid   = np.logspace(np.log10(1.0), np.log10(50.0**2), 8)
+    s_grid = np.logspace(np.log10(1.0), np.log10(50.0**2), 8)
     hgf_grid = np.array([(e, s) for e in eta_grid for s in s_grid])
 
     param_grids = {
@@ -937,7 +1019,7 @@ if __name__ == "__main__":
         environment_fn=generate_change_point_environment,
         n_trials=300,
         sigma_r=5.0,
-        decision_rule="BIC",   # robust choice
+        decision_rule="BIC",  # robust choice
     )
 
     print_confusion_matrix(winners)
