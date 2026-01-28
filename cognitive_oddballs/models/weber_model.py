@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from pyhgf.model import Network
+from pyhgf.response import total_gaussian_surprise
 
 from cognitive_oddballs.models.model import Model
 
@@ -49,6 +50,7 @@ class WeberModel(Network, Model):
     # higher preciscion
     # -> works fine if node 4 is removed
 
+    # ---------- Model interface implementation ----------
     def run(self, observations: np.ndarray) -> pd.DataFrame:
         self.input_data(observations)
 
@@ -57,6 +59,90 @@ class WeberModel(Network, Model):
         rename_dict = {"x_0_expected_mean": "raw_responses"}
 
         return output.rename(columns=rename_dict)
+    
+    # TODO: IMPORTANT!!! this is unfinished -- I'm pretty sure I remember there being a specific way to re-assign node parameters
+    # and i did not use that here yet
+    # i need to look up how to do that properly
+    # ALSO ALSO ALSO this does not include all parameters yet
+    def set_parameters_cma(self, theta: np.ndarray) -> None:
+        """
+        Set model parameters from CMA-ES parameter vector.
+
+        theta[0] = log_sigma_obs
+        theta[1] = log_sigma_mu
+        """
+
+        log_n4_p, log_tv_3, log_tv_1 = map(float, theta)
+
+        # Maybe this way instead?
+        #self.nodes[0].obs_noise = float(np.exp(theta[0]))
+        #self.nodes[1].tonic_volatility = float(np.exp(theta[1]))
+
+        n4_p = float(np.exp(log_n4_p))
+        tv_3 = float(np.exp(log_tv_3))
+        tv_1 = float(np.exp(log_tv_1))
+
+        # IMPORTANT: still need to check how pyHGF exposes nodes.
+        # Often sth like self.nodes[0], self.nodes[1], ...
+        # Here assuming: node0=input, node1=value parent, node2=vol parent of 1,
+        # node3=vol parent of 0, node4=vol parent of 3 (if present).
+
+        # 1) set node4 precision (if present)
+        if self._has_node4:
+            node4 = self.nodes[-1]
+            if hasattr(node4, "precision"):
+                node4.precision = n4_p
+
+        # 2) set tonic volatility of node3
+        node3 = self.nodes[3]   # adjust index to your Network API
+        if hasattr(node3, "tonic_volatility"):
+            node3.tonic_volatility = tv_3
+
+        # 3) set tonic volatility of node1 (volatility parent of node0)
+        node1 = self.nodes[1]   # again, adjust index if needed
+        if hasattr(node1, "tonic_volatility"):
+            node1.tonic_volatility = tv_1
+
+        # Call "reset" to clear history after parameter change? 
+
+    # TODO: LLM-generated -- verify correctness
+    # Again, does not include all params
+    def objective_cma(self, observations: np.ndarray) -> float:
+        """
+        CMA-ES objective: model 'surprise' (negative log probability) for the
+        given sequence of observations, using pyHGF's Gaussian surprise.
+
+        CMA-ES minimizes this directly.
+        """
+        # Feed new data; this should trigger a fresh run under current parameters
+        self.input_data(observations)
+
+        surprise_value = self.surprise(
+            response_function=total_gaussian_surprise, # TODO: is that the right one to use? I feel like I had this problem when I implemented stuff for the presentation
+            response_function_inputs=(),          # no extra inputs
+            response_function_parameters=None,    # no extra params
+        )
+
+        return float(surprise_value)
+    
+    # TODO: LLM-generated -- verify correctness
+    @staticmethod
+    def decode_cma_theta(theta: np.ndarray) -> dict:
+        """
+        Map CMA parameter vector back to named, interpretable parameters.
+
+        Current parameterization:
+            ...
+        """
+        log_n4_p, log_tv_3, log_tv_1 = map(float, theta)
+        return {
+            "n4_precision": float(np.exp(log_n4_p)),
+            "tonic_vol_3": float(np.exp(log_tv_3)),
+            "tonic_vol_1": float(np.exp(log_tv_1)),
+            "log_n4_precision": log_n4_p,
+            "log_tonic_vol_3": log_tv_3,
+            "log_tonic_vol_1": log_tv_1,
+        }
 
     # both fitting functions currently the same, but should maybe stay separate for usability
     def fit_to_change_point_oddball_environment(self, df):

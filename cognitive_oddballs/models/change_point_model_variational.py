@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import stats
+from scipy.special import logsumexp
 
 from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
@@ -130,6 +131,10 @@ class ChangePointModelVariational(Model):
             )
 
         self.history = pd.DataFrame(columns=columns)
+    
+    # helper fct
+    def _sigmoid(x: float) -> float:
+        return 1.0 / (1.0 + np.exp(-x))
 
     # --------------------------------------------------
     # Second-level transformations (for HGF comparability)
@@ -320,7 +325,7 @@ class ChangePointModelVariational(Model):
 
         self.history = pd.concat([self.history, pd.DataFrame([row_data])], ignore_index=True)
 
-    # --------------------------------------------------
+    # -------------------- Interface Methods --------------------------
 
     def run(self, observations: np.ndarray) -> pd.DataFrame:
         """
@@ -422,6 +427,136 @@ class ChangePointModelVariational(Model):
         # output["Log Likelihoods"] = self.history["change_point_probs"].values
 
         return output.rename(columns=rename_dict)
+    
+    # TODO: LLM-generated -- verify correctness
+    def set_parameters_cma(self, theta: np.ndarray) -> None:
+        """
+        theta = [log_obs_noise, log_w1, log_w2, logit_h]
+        """
+        log_s, log_w1, log_w2, logit_h = map(float, theta)
+
+        self.obs_noise = float(np.exp(log_s))
+        self.w1 = float(np.exp(log_w1))
+        self.w2 = float(np.exp(log_w2))
+        self.hazard_rate = float(1.0 / (1.0 + np.exp(-logit_h)))  # sigmoid
+
+        # reset state to priors for this parameter setting
+        self.mu = self.mu0
+        self.sigma = self.sigma0
+
+        if self.add_second_level:
+            self.mu2 = 0.0
+            self.sigma2 = 1.0
+
+        # reset history
+        self.history = pd.DataFrame(columns=self.history.columns)
+
+    # TODO: LLM-generated -- verify correctness
+    # IMPORTANT: this might a) not work and (more importantly)
+    # b) be the wrong objective for this model
+    # this should be Eq. 60/61 in Marković & Kiebel (2016)
+    # but I have not looked at that closely, cause I need to go now.
+    def objective_cma(self, observations: np.ndarray) -> float:
+        """
+        Negative log-likelihood under the change-point generative model,
+        using the Gaussian mixture model for prediction errors.
+
+        CMA-ES minimizes this.
+        """
+        # reset state for this sequence
+        self.mu = self.mu0
+        self.sigma = self.sigma0
+        if self.add_second_level:
+            self.mu2 = 0.0
+            self.sigma2 = 1.0
+        self.history = pd.DataFrame(columns=self.history.columns)
+
+        loglik_sum = 0.0
+
+        for o in observations:
+            o = float(o)
+            delta = o - self.mu
+
+            # variances under stability vs change
+            var_stability = self.sigma**2 + self.w1 + self.obs_noise**2
+            var_change = self.obs_noise**2 + self.w2
+
+            # log-likelihoods of prediction error under each regime
+            lp_stab = stats.norm.logpdf(delta, 0.0, np.sqrt(var_stability))
+            lp_change = stats.norm.logpdf(delta, 0.0, np.sqrt(var_change))
+
+            # mixture log-likelihood: log[(1-h)*N_stab + h*N_change]
+            loglik_t = logsumexp(
+                [np.log(1.0 - self.hazard_rate) + lp_stab,
+                 np.log(self.hazard_rate) + lp_change]
+            )
+            loglik_sum += loglik_t
+
+            # change-point probability Ω_t (same mixture components)
+            log_num = np.log(self.hazard_rate) + lp_change
+            log_den = loglik_t                     # denominator of mixture
+            omega = float(np.exp(log_num - log_den))
+
+            # update first-level state exactly as in update()
+            # (you may want to refactor to avoid duplication, but this is fine
+            #  for now)
+
+            inv_sigma_sq = (1.0 - omega) / (self.sigma**2 + self.w1) + 1.0 / (self.obs_noise**2)
+            sigma_new = 1.0 / np.sqrt(inv_sigma_sq)
+
+            alpha = sigma_new / self.obs_noise
+            alpha = np.clip(alpha, 0.0, 1.0)
+
+            mu_new = self.mu + alpha * delta
+            mu_new = np.clip(mu_new, 0.0, 500.0)
+
+            # optional simple 2nd-level update as before
+            if self.add_second_level:
+                omega_prev = (
+                    self.history["change_point_probs"].iloc[-1]
+                    if len(self.history) > 0
+                    else omega
+                )
+                mu2_new = self._omega_to_mu2(omega)
+                mu2_prev = self._omega_to_mu2(omega_prev)
+                epsilon2 = mu2_new - mu2_prev
+                alpha2 = self.sigma2**2 / (self.sigma2**2 + 1.0)
+                self.mu2 = mu2_prev + alpha2 * epsilon2
+
+            # update state
+            self.mu = mu_new
+            self.sigma = sigma_new
+
+            # if you want to keep history during optimization, you can call
+            # _store_history(delta, omega, alpha, epsilon2, alpha2) here.
+
+        # CMA-ES minimizes → negative log-likelihood
+        return -float(loglik_sum)
+
+    # TODO: LLM-generated -- verify correctness
+    @staticmethod
+    def decode_cma_theta(theta: np.ndarray) -> dict:
+        """
+        Map CMA parameter vector back to named, interpretable parameters.
+        theta = [log_obs_noise, log_w1, log_w2, logit_h]
+        """
+        log_s, log_w1, log_w2, logit_h = map(float, theta)
+
+        obs_noise = float(np.exp(log_s))
+        w1 = float(np.exp(log_w1))
+        w2 = float(np.exp(log_w2))
+        h = float(1.0 / (1.0 + np.exp(-logit_h)))
+
+        return {
+            "obs_noise": obs_noise,
+            "w1": w1,
+            "w2": w2,
+            "hazard_rate": h,
+            "log_obs_noise": log_s,
+            "log_w1": log_w1,
+            "log_w2": log_w2,
+            "logit_h": logit_h,
+        }
 
     # --------------------------------------------------
     # Visualization

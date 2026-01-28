@@ -93,6 +93,7 @@ class HGFPaper2Gaussian(Model):
         self.trial = 0
 
         self.history: dict[str, list[float]] = {
+            "F_t": [],
             "o": [],
             "mu1_hat": [],
             "sig1_hat": [],
@@ -124,6 +125,8 @@ class HGFPaper2Gaussian(Model):
 
         mu1_prev = self.mu1
         sig1_prev = self.sig1
+        mu2_prev = self.mu2
+        sig2_prev = self.sig2
         # denominator helper
         den1 = max(sig1_prev + omega, minvar)
 
@@ -159,6 +162,26 @@ class HGFPaper2Gaussian(Model):
         self.mu1, self.mu2 = mu1_new, mu2_new
         self.sig1, self.sig2 = sig1_new, sig2_new
 
+        # ------------ Free energy (eq. 29) ---------------
+        # TODO: LLM-generated -- verify correctness
+        s = self.cfg.s
+
+        den1 = max(sig1_prev + omega, minvar)
+        den2 = max(sig2_prev + self.cfg.eta, minvar)
+
+        term1 = -0.5 * np.log(s)
+        term2 = -0.5 * den1 / s
+        term3 = -0.5 * np.log(den1)
+        term4 = 0.5 * (sig1_new + (mu1_new - mu1_prev) ** 2) / den1
+        term5 = 0.5 * np.log(den2)
+        term6 = 0.5 * (sig2_new + (mu2_new - mu2_prev) ** 2) / den2
+        term7 = -0.5 * np.log(2.0 * np.pi)
+        term8 = 0.5 * np.log(max(sig1_new, minvar))
+        term9 = 0.5 * np.log(max(sig2_new, minvar))
+
+        vfe = term1 + term2 + term3 + term4 + term5 + term6 + term7 + term8 + term9
+        self.history["F_t"].append(float(vfe))
+
         # Log
         self.history["o"].append(o)
         self.history["mu1_hat"].append(mu1_prev)
@@ -176,6 +199,8 @@ class HGFPaper2Gaussian(Model):
         self.history["k"].append(k)
         self.history["r"].append(r)
 
+    # ---------- Model interface implementation ----------
+
     def run(self, observations: np.ndarray) -> pd.DataFrame:
         for x in observations:
             self.update(x)
@@ -185,6 +210,65 @@ class HGFPaper2Gaussian(Model):
         rename_dict = {"x_0_expected_mean": "raw_responses"}
 
         return output.rename(columns=rename_dict)
+    
+    # TODO: LLM-generated -- verify correctness
+    # ALSO this does not include all parameters yet
+    def set_parameters_cma(self, theta: np.ndarray) -> None:
+        """
+        If all:
+        theta = [log_eta, log_s, mu1_0, log_sig1_0, mu2_0, log_sig2_0]
+        Currently:
+        theta = [log_eta, log_s, mu2_0, log_sig2_0]
+        """
+        log_eta, log_s, mu2_0, log_sig2_0 = map(float, theta)
+
+        self.cfg.eta = np.exp(log_eta)
+        self.cfg.s = np.exp(log_s)
+        self.cfg.mu2_0 = mu2_0
+        self.cfg.sig2_0 = np.exp(log_sig2_0)
+
+        # reset state to the priors for this parameter setting
+        self.mu1 = self.cfg.mu1_0
+        self.sig1 = max(self.cfg.sig1_0, self.cfg.min_var)
+        self.mu2 = self.cfg.mu2_0
+        self.sig2 = max(self.cfg.sig2_0, self.cfg.min_var)
+
+        # reset history
+        for k in self.history:
+            self.history[k] = []
+
+    # TODO: LLM-generated -- verify correctness
+    def objective_cma(self, observations: np.ndarray) -> float:
+        """
+        Return negative free energy (≈ negative log-likelihood) over this sequence.
+        """
+        F_sum = 0.0
+        for o in observations:
+            self.update(o)
+            F_sum += self.history["F_t"][-1]
+
+        # CMA-ES minimizes, so return negative F
+        return -float(F_sum)
+    
+    # TODO: LLM-generated -- verify correctness
+    # does not include all parameters yet
+    @staticmethod
+    def decode_cma_theta(theta: np.ndarray) -> dict:
+        """
+        Map CMA parameter vector back to named, interpretable parameters.
+        """
+        log_eta, log_s, mu2_0, log_sig2_0 = map(float, theta)
+
+        return {
+            "eta": float(np.exp(log_eta)),
+            "s": float(np.exp(log_s)),
+            "mu2_0": mu2_0,
+            "sig2_0": float(np.exp(log_sig2_0)),
+            # possibly: expose log-params as well for diagnostics
+            "log_eta": log_eta,
+            "log_s": log_s,
+            "log_sig2_0": log_sig2_0,
+        }
 
     # ---------- Plotting (adapted from plot_results in hgf/hgf3.py) ----------
     def plot_results(
