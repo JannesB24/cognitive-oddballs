@@ -276,6 +276,8 @@ def plot_learning_rate_vs_error(results: dict, title: str):
     plt.tight_layout()
     plt.show()
 
+    plt.savefig(FIGURES_DIR / f"learning_rate_vs_error_{title.replace(' ', '_')}.png")
+
 
 # Main
 
