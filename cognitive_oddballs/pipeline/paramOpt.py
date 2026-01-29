@@ -49,7 +49,7 @@ def make_cma_objective(model_cls: type[Model], envs: list[np.ndarray]):
 def objective_function_cma_theta(
     theta: np.ndarray,
     model_cls: type[Model],
-    envs: list[np.ndarray],
+    envs: pd.DataFrame,
     penalty: float = 1e12,   # big penalty in case of failure
 ) -> float:
     """
@@ -58,11 +58,50 @@ def objective_function_cma_theta(
 
     theta:       parameter vector for CMA-ES
     model_cls:   class of the model (e.g. ChangePointModelVariational)
-    envs:        list of pre-generated environments (arrays of observations)
+    envs:        pd.df containg info of pre-generated environment
     """
     total_obj = 0.0
+    for env in envs: # env type: <class 'pandas.core.frame.DataFrame'>
+        #for observations x in env:
+        if "x" in env.columns:
+            observations = env["x"].to_numpy(dtype=float)
+        
+            model = model_cls() # fresh model each run
+            model.set_parameters_cma(theta)
 
-    try:
+            obj = model.objective_cma(observations)
+            total_obj += float(obj)
+
+    return total_obj / len(envs)
+
+    """ try:
+    for env in envs:
+        # --- convert environment to 1D float array of observations ---
+        if isinstance(env, pd.DataFrame):
+            # adjust 'x' if your generator uses a different column name
+            if "x" in env.columns:
+                observations = env["x"].to_numpy(dtype=float)
+            else:
+                raise ValueError(
+                    f"DataFrame environment has no 'x' column; "
+                    f"columns={list(env.columns)}"
+                )
+        else:
+            # assume it's already array-like
+            observations = np.asarray(env, dtype=float)
+
+        model = model_cls()  # fresh model each run
+        model.set_parameters_cma(theta)
+
+        obj = model.objective_cma(observations)
+
+        if not np.isfinite(obj):
+            raise FloatingPointError(f"Non-finite objective: {obj}")
+
+        total_obj += float(obj)
+    """
+
+    """try:
         for observations in envs:
             model = model_cls() # fresh model each run
             model.set_parameters_cma(theta)
@@ -84,7 +123,7 @@ def objective_function_cma_theta(
         logger.warning(msg)
 
         # large penalty so CMA-ES moves away from region
-        return penalty
+        return penalty"""
 
         
 def cma_optimization(cma_params: dict, envs: list[np.ndarray], seed: int = 42):
@@ -149,7 +188,7 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
         ),
         "sigma0": 0.5,  # initial global step-size
         "maxfevals": 5000,  # maximum number of function evaluations
-        "verb_disp": 1,  # verbosity level
+        "verb_disp": 100,  # verbosity level
     }
 
     cma_params_weber = {
@@ -166,18 +205,19 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
     # TODO: auskommentiert for testing, toggle that back when done
     cma_optimization_params = {
         #ChangePointModelVariational: cma_params_cmp,
-        HGFPaper2Gaussian: cma_params_hgf,
-        #WeberModel: cma_params_weber,
+        #HGFPaper2Gaussian: cma_params_hgf,
+        WeberModel: cma_params_weber,
     }
 
     logger.info("Optimizing models on Change Point Environments")
     cp_results = cma_optimization(cma_optimization_params, cp_envs)
-    logger.info("Change Point Environment Optimization Results:")
+    logger.info("\nChange Point Environment Optimization Results:")
     for model_name, result in cp_results.items():
         logger.info(f"  {model_name}: {result}")
 
     logger.info("\nOptimizing models on Random Walk Environments")
     rw_results = cma_optimization(cma_optimization_params, rw_envs)
+    logger.info("\nRandom Walk Environment Optimization Results:")
     for model_name, result in rw_results.items():
         logger.info(f"  {model_name}: {result}")
 
