@@ -1,5 +1,12 @@
+"""
+Docstring for cognitive_oddballs.pipeline.paramOpt
+
+Perform parameter optimisation for cognitive oddball models using CMA-ES.
+"""
+
 from collections.abc import Callable
 from pathlib import Path
+import logging
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,9 +20,9 @@ from cognitive_oddballs.models.change_point_model_variational import ChangePoint
 from cognitive_oddballs.models.hgf.hgf2_gaussian import HGFPaper2Gaussian
 from cognitive_oddballs.models.model import Model
 from cognitive_oddballs.models.weber_model import WeberModel
-from cognitive_oddballs.pipeline.eval import set_seed
+from cognitive_oddballs.utils import set_seed
 
-# Paths
+# Configs
 PROJECT_ROOT = Path(__file__).resolve().parent
 RESULTS_DIR = PROJECT_ROOT / "results"
 FIGURES_DIR = RESULTS_DIR / "figures"
@@ -23,10 +30,9 @@ FIGURES_DIR = RESULTS_DIR / "figures"
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
 
+logger = logging.getLogger(__name__)
 
-# instantiate each model with default parameters
-# run for 1000 environments a 100 trials each
-
+# so that we use same environments for each model during optimization
 def generate_environments(environment_generator: Callable, n_envs: int, n_trials: int):
     return [environment_generator(n_trials) for _ in range(n_envs)]
 
@@ -44,9 +50,11 @@ def objective_function_cma_theta(
     theta: np.ndarray,
     model_cls: type[Model],
     envs: list[np.ndarray],
+    penalty: float = 1e12,   # big penalty in case of failure
 ) -> float:
     """
     CMA-ES objective over a set of environments, for a given model class.
+    Robust version: catch numerical failures and NaNs and return a penalty.
 
     theta:       parameter vector for CMA-ES
     model_cls:   class of the model (e.g. ChangePointModelVariational)
@@ -54,15 +62,32 @@ def objective_function_cma_theta(
     """
     total_obj = 0.0
 
-    for observations in envs:
-        model = model_cls() # fresh model each run
-        model.set_parameters_cma(theta)
-        total_obj += model.objective_cma(observations) # e.g., surprise = -np.sum(np.log(model_output["predicted_likelihood"] + 1e-10)) # Avoid log(0)
+    try:
+        for observations in envs:
+            model = model_cls() # fresh model each run
+            model.set_parameters_cma(theta)
 
-    return total_obj / len(envs)
+            obj = model.objective_cma(observations)
+
+            if not np.isfinite(obj):
+                raise FloatingPointError(f"Non-finite objective: {obj}")
+
+            total_obj += float(obj)
+
+        return total_obj / len(envs)
+
+    except Exception as e:
+        msg = (
+            f"[CMA safeguard] {model_cls.__name__} failed for theta={theta}: "
+            f"{type(e).__name__}: {e}"
+        )
+        logger.warning(msg)
+
+        # large penalty so CMA-ES moves away from region
+        return penalty
 
         
-def cma_optimization(cma_params: dict, envs: list[np.ndarray]):
+def cma_optimization(cma_params: dict, envs: list[np.ndarray], seed: int = 42):
     """
     cma_params: dict mapping model class -> dict of CMA config
     envs: list of observation arrays (same set used for all models in this call)
@@ -70,7 +95,7 @@ def cma_optimization(cma_params: dict, envs: list[np.ndarray]):
     optimal_thetas = {}
 
     for model_cls, params in cma_params.items():
-        print(f"Optimizing {model_cls.__name__}...")
+        logger.info(f"Optimizing {model_cls.__name__}...")
 
         # need objective function with only theta as parameters
         objective = make_cma_objective(model_cls, envs)
@@ -84,7 +109,7 @@ def cma_optimization(cma_params: dict, envs: list[np.ndarray]):
                 "maxfevals": params["maxfevals"], # limit evaluations
                 "verb_disp": params["verb_disp"], # verbosity
                 # "popsize": 16, # optional: control population size
-                "seed": 42, # for reproducibility
+                "seed": seed, # for reproducibility
             },
         )
 
@@ -94,10 +119,8 @@ def cma_optimization(cma_params: dict, envs: list[np.ndarray]):
     return optimal_thetas    
 
 
-def run_param_optimization():
-    set_seed(42)
-    n_envs = 1000
-    n_trials = 100
+def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 42):
+    set_seed(seed)
 
     cp_envs = generate_environments(generate_change_point_environment, n_envs, n_trials)
     rw_envs = generate_environments(generate_random_walk_environment, n_envs, n_trials)
@@ -140,17 +163,22 @@ def run_param_optimization():
         "verb_disp": 1,  # verbosity level
     }
 
+    # TODO: auskommentiert for testing, toggle that back when done
     cma_optimization_params = {
-        ChangePointModelVariational: cma_params_cmp,
+        #ChangePointModelVariational: cma_params_cmp,
         HGFPaper2Gaussian: cma_params_hgf,
-        WeberModel: cma_params_weber,
+        #WeberModel: cma_params_weber,
     }
 
-    print("Optimizing models on Change Point Environments")
+    logger.info("Optimizing models on Change Point Environments")
     cp_results = cma_optimization(cma_optimization_params, cp_envs)
-    print(cp_results["HGFPaper2Gaussian"]["decoded"])
+    logger.info("Change Point Environment Optimization Results:")
+    for model_name, result in cp_results.items():
+        logger.info(f"  {model_name}: {result}")
 
-    print("\nOptimizing models on Random Walk Environments")
+    logger.info("\nOptimizing models on Random Walk Environments")
     rw_results = cma_optimization(cma_optimization_params, rw_envs)
+    for model_name, result in rw_results.items():
+        logger.info(f"  {model_name}: {result}")
 
     return cp_results, rw_results

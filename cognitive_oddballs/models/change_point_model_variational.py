@@ -17,7 +17,7 @@ Reference:
     Models for Adaptive Learning in Changing Environments. Frontiers in
     Computational Neuroscience, 10, 33.
 """
-
+import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -28,6 +28,7 @@ from cognitive_oddballs.environments.change_point_oddball import generate_change
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
 from cognitive_oddballs.models.model import Model
 
+logger = logging.getLogger(__name__)
 
 class ChangePointModelVariational(Model):
     """
@@ -458,80 +459,72 @@ class ChangePointModelVariational(Model):
     # but I have not looked at that closely, cause I need to go now.
     def objective_cma(self, observations: np.ndarray) -> float:
         """
-        Negative log-likelihood under the change-point generative model,
-        using the Gaussian mixture model for prediction errors.
+        CMA-ES objective for the Nassar/Markovic change-point model,
+        using Eq. (52): sum of negative log marginal likelihoods.
 
-        CMA-ES minimizes this.
+        For each trial t:
+            -ln p(o_t | O_{t-1}, θ)
+            = -ln [ (1-h) N(o_t; μ_{t-1}, σ_{t-1}^2 + w1 + s^2)
+                    + h     N(o_t; 0,        w2      + s^2) ].
+
+        We sum this over t and return the total (or you can divide by T
+        if you prefer an average; CMA-ES only cares about monotonicity).
         """
-        # reset state for this sequence
+        # reset state and history for this sequence
         self.mu = self.mu0
         self.sigma = self.sigma0
         if self.add_second_level:
             self.mu2 = 0.0
             self.sigma2 = 1.0
-        self.history = pd.DataFrame(columns=self.history.columns)
 
-        loglik_sum = 0.0
+        neg_loglik_sum = 0.0
 
         for o in observations:
             o = float(o)
-            delta = o - self.mu
+            mu_prev = self.mu
+            sigma_prev = self.sigma
 
-            # variances under stability vs change
-            var_stability = self.sigma**2 + self.w1 + self.obs_noise**2
-            var_change = self.obs_noise**2 + self.w2
+            # ----- Eq. (52): mixture components in observation space -----
+            var_stab = sigma_prev**2 + self.w1 + self.obs_noise**2
+            var_ch   = self.w2 + self.obs_noise**2
 
-            # log-likelihoods of prediction error under each regime
-            lp_stab = stats.norm.logpdf(delta, 0.0, np.sqrt(var_stability))
-            lp_change = stats.norm.logpdf(delta, 0.0, np.sqrt(var_change))
+            lp_stab = stats.norm.logpdf(o, loc=mu_prev, scale=np.sqrt(var_stab))
+            lp_ch   = stats.norm.logpdf(o, loc=0.0,    scale=np.sqrt(var_ch))
 
-            # mixture log-likelihood: log[(1-h)*N_stab + h*N_change]
-            loglik_t = logsumexp(
-                [np.log(1.0 - self.hazard_rate) + lp_stab,
-                 np.log(self.hazard_rate) + lp_change]
-            )
-            loglik_sum += loglik_t
+            # log p(o_t | O_{t-1}, θ) = logsumexp over the two regimes
+            log_p_ot = logsumexp([
+                np.log(1.0 - self.hazard_rate) + lp_stab,
+                np.log(self.hazard_rate)       + lp_ch,
+            ])
 
-            # change-point probability Ω_t (same mixture components)
-            log_num = np.log(self.hazard_rate) + lp_change
-            log_den = loglik_t                     # denominator of mixture
-            omega = float(np.exp(log_num - log_den))
+            neg_loglik_sum += -log_p_ot
 
-            # update first-level state exactly as in update()
-            # (you may want to refactor to avoid duplication, but this is fine
-            #  for now)
+            # ----- change-point probability Ω_t (for the state update) -----
+            log_num_change = np.log(self.hazard_rate) + lp_ch
+            omega = float(np.exp(log_num_change - log_p_ot))
 
-            inv_sigma_sq = (1.0 - omega) / (self.sigma**2 + self.w1) + 1.0 / (self.obs_noise**2)
+            # ----- state update (same logic as your update()) -----
+            delta = o - mu_prev
+
+            inv_sigma_sq = (1.0 - omega) / (sigma_prev**2 + self.w1) \
+                           + 1.0 / (self.obs_noise**2)
             sigma_new = 1.0 / np.sqrt(inv_sigma_sq)
 
             alpha = sigma_new / self.obs_noise
             alpha = np.clip(alpha, 0.0, 1.0)
 
-            mu_new = self.mu + alpha * delta
+            mu_new = mu_prev + alpha * delta
             mu_new = np.clip(mu_new, 0.0, 500.0)
 
-            # optional simple 2nd-level update as before
+            # optional: second-level update as before
             if self.add_second_level:
-                omega_prev = (
-                    self.history["change_point_probs"].iloc[-1]
-                    if len(self.history) > 0
-                    else omega
-                )
-                mu2_new = self._omega_to_mu2(omega)
-                mu2_prev = self._omega_to_mu2(omega_prev)
-                epsilon2 = mu2_new - mu2_prev
-                alpha2 = self.sigma2**2 / (self.sigma2**2 + 1.0)
-                self.mu2 = mu2_prev + alpha2 * epsilon2
+                # you can keep your existing simple 2nd-level update here
+                pass
 
-            # update state
             self.mu = mu_new
             self.sigma = sigma_new
 
-            # if you want to keep history during optimization, you can call
-            # _store_history(delta, omega, alpha, epsilon2, alpha2) here.
-
-        # CMA-ES minimizes → negative log-likelihood
-        return -float(loglik_sum)
+        return float(neg_loglik_sum)
 
     # TODO: LLM-generated -- verify correctness
     @staticmethod
@@ -667,12 +660,12 @@ class ChangePointModelVariational(Model):
 
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("Testing ChangePointModel_Variational (CPM 2016 Adjusted)")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("Testing ChangePointModel_Variational (CPM 2016 Adjusted)")
+    logger.info("=" * 60)
 
     # Generate change-point environment
-    print("\n1. Testing with Change-Point Environment...")
+    logger.info("\n1. Testing with Change-Point Environment...")
     df_change_point = generate_change_point_environment(
         n_trials=400, oddball_hazard_rate=0.1, sigma=25, change_point_hazard_rate=0.1, seed=555
     )
@@ -701,20 +694,20 @@ if __name__ == "__main__":
     uncertainties = results_change["Uncertainty"].values[:-1]  # Use uncertainty from previous trial
 
     # Print summary
-    print("\nChange-Point Environment Results:")
-    print(f"  Mean learning rate: {results_change['LearningRate'].mean():.4f}")
-    print(f"  Max learning rate: {results_change['LearningRate'].max():.4f}")
-    print(f"  Mean CPP: {results_change['CPP'].mean():.4f}")
-    print(f"  Max CPP: {results_change['CPP'].max():.4f}")
-    print("\nPerformance Metrics:")
-    print(f"  MAE (mean absolute error): {mae:.4f}")
+    logger.info("\nChange-Point Environment Results:")
+    logger.info(f"  Mean learning rate: {results_change['LearningRate'].mean():.4f}")
+    logger.info(f"  Max learning rate: {results_change['LearningRate'].max():.4f}")
+    logger.info(f"  Mean CPP: {results_change['CPP'].mean():.4f}")
+    logger.info(f"  Max CPP: {results_change['CPP'].max():.4f}")
+    logger.info("\nPerformance Metrics:")
+    logger.info(f"  MAE (mean absolute error): {mae:.4f}")
 
     # Plot
-    print("\nGenerating plots for change-point environment...")
+    logger.info("\nGenerating plots for change-point environment...")
     cpm_model_change.plot_results(results_change)
 
     # Generate random walk environment
-    print("\n2. Testing with Random Walk Environment...")
+    logger.info("\n2. Testing with Random Walk Environment...")
     df_random_walk = generate_random_walk_environment(
         n_trials=400,
         oddball_hazard_rate=0.1,
@@ -747,16 +740,16 @@ if __name__ == "__main__":
     uncertainties = results_walk["Uncertainty"].values[:-1]  # Use uncertainty from previous trial
 
     # Print summary
-    print("\nRandom Walk Environment Results:")
-    print(f"  Mean learning rate: {results_walk['LearningRate'].mean():.4f}")
-    print(f"  Max learning rate: {results_walk['LearningRate'].max():.4f}")
-    print(f"  Mean CPP: {results_walk['CPP'].mean():.4f}")
-    print(f"  Max CPP: {results_walk['CPP'].max():.4f}")
-    print("\nPerformance Metrics:")
-    print(f"  MAE (mean absolute error): {mae:.4f}")
+    logger.info("\nRandom Walk Environment Results:")
+    logger.info(f"  Mean learning rate: {results_walk['LearningRate'].mean():.4f}")
+    logger.info(f"  Max learning rate: {results_walk['LearningRate'].max():.4f}")
+    logger.info(f"  Mean CPP: {results_walk['CPP'].mean():.4f}")
+    logger.info(f"  Max CPP: {results_walk['CPP'].max():.4f}")
+    logger.info("\nPerformance Metrics:")
+    logger.info(f"  MAE (mean absolute error): {mae:.4f}")
 
     # Plot
-    print("\nGenerating plots for random walk environment...")
+    logger.info("\nGenerating plots for random walk environment...")
     cpm_model_walk.plot_results(results_walk)
 
-    print("\nDone!")
+    logger.info("\nDone!")

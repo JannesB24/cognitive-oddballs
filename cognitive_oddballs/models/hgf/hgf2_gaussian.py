@@ -58,8 +58,8 @@ class HGFPaper2Gaussian(Model):
 
     def __init__(
         self,
-        eta: float,
-        s: float,
+        eta: float = 0.005,
+        s: float = 15.0**2,
         mu1_init: float = 0.0,
         sig1_init: float = 1.0,
         mu2_init: float = 0.0,
@@ -67,6 +67,7 @@ class HGFPaper2Gaussian(Model):
         min_var: float = 1e-8,
         exp_clip_value: float = 60.0,
     ):
+        
         self.cfg = HGF2Config(
             mu1_0=float(mu1_init),
             sig1_0=float(sig1_init),

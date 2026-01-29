@@ -27,6 +27,7 @@ Evaluation Metrics:
 
 from collections.abc import Callable
 from pathlib import Path
+import logging
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -38,6 +39,8 @@ from cognitive_oddballs.models.change_point_model_variational import ChangePoint
 from cognitive_oddballs.models.hgf.hgf2_gaussian import HGFPaper2Gaussian
 from cognitive_oddballs.models.model import Model
 from cognitive_oddballs.models.weber_model import WeberModel
+from cognitive_oddballs.pipeline.paramOpt import run_param_optimization
+from cognitive_oddballs.utils import set_seed
 
 # Paths
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -45,11 +48,6 @@ RESULTS_DIR = PROJECT_ROOT / "results"
 FIGURES_DIR = RESULTS_DIR / "figures"
 
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-
-
-# Utilities
-def set_seed(seed: int = 42):
-    np.random.seed(seed)
 
 
 # Evaluation metrics
@@ -319,12 +317,21 @@ def plot_learning_rate_vs_error(results: dict, title: str):
 if __name__ == "__main__":
     set_seed(42)
 
-    results_cp = experiment_changepoint()
+    logging.basicConfig(
+        level=logging.DEBUG,  # TODO: switch back to info or warning when done with debugging
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+
+    #results_cp = experiment_changepoint()
     # results_rw = experiment_randomwalk()
 
-    plot_learning_rate_vs_error(results_cp, "Changepoint oddball environment")
+
+    #plot_learning_rate_vs_error(results_cp, "Changepoint oddball environment")
 
     # plot_learning_rate_vs_error(results_rw, "Random-walk oddball environment")
+
+    param_results_cp, param_results_rw = run_param_optimization(n_envs=5, n_trials=20, seed=42) # TODO: adjust back to 1000, 100
+
 
 
 # beliefs (Nassar: Belief; Weber: x_0_expected_mean)
