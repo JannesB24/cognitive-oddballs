@@ -36,13 +36,11 @@ class ChangePointModelVariational(Model):
     Bayesian inference from Marković & Kiebel (2016), Section 4.1.2.
 
     The model assumes the environment switches between:
-    - Stability: x_t = x_{t-1} + √w₁ · noise
-    - Change-point: x_t = √w₂ · noise
+    - Stability (1 - h): x_t = x_{t-1} + √w₁ · noise
+    - Change-point (h): x_t = √w₂ · noise
 
     Parameters
     ----------
-    x : array-like
-        Observed outcomes (e.g., bag drop positions)
     mu0 : float
         Initial belief about hidden state (μ₀¹)
     sigma0 : float
@@ -79,8 +77,7 @@ class ChangePointModelVariational(Model):
     --------
     >>> import numpy as np
     >>> observations = np.random.normal(250, 10, 100)
-    >>> model = ChangePointModel_Variational(
-    ...     x=observations,
+    >>> model = ChangePointModelVariational(
     ...     mu0=250,
     ...     sigma0=10,
     ...     obs_noise=10,
@@ -92,7 +89,16 @@ class ChangePointModelVariational(Model):
     >>> print(results[['Trial', 'Belief', 'LearningRate']].head())
     """
 
-    def __init__(self, mu0, sigma0, obs_noise, w1, w2, h, add_second_level=True):
+    def __init__(
+        self,
+        mu0: float,
+        sigma0: float,
+        obs_noise: float,
+        w1: float,
+        w2: float,
+        h: float,
+        add_second_level: bool = True,
+    ) -> None:
         # ===== Perceptual free parameters =====
         self.mu0 = mu0  # μ₀¹ - Initial belief
         self.sigma0 = sigma0  # σ₀¹ - Initial uncertainty
@@ -135,7 +141,7 @@ class ChangePointModelVariational(Model):
     # Second-level transformations (for HGF comparability)
     # --------------------------------------------------
 
-    def _omega_to_mu2(self, omega, scaling=1.0):
+    def _omega_to_mu2(self, omega, scaling=1.0) -> float:
         """
         Convert change-point probability to second-level representation.
 
@@ -161,7 +167,7 @@ class ChangePointModelVariational(Model):
         omega = np.clip(omega, 1e-6, 1 - 1e-6)
         return (1 / scaling) * np.log(omega / (1 - omega))
 
-    def _mu2_to_omega(self, mu2, scaling=1.0):
+    def _mu2_to_omega(self, mu2: float, scaling: float = 1.0) -> float:
         """
         Convert second-level representation back to change-point probability.
 
@@ -186,7 +192,7 @@ class ChangePointModelVariational(Model):
     # Core inference functions
     # --------------------------------------------------
 
-    def _change_point_probability(self, delta):
+    def _change_point_probability(self, delta: float) -> float:
         """
         Compute change-point probability Ω_t using Bayes rule.
 
@@ -213,12 +219,12 @@ class ChangePointModelVariational(Model):
         # Likelihood under stability (no change-point)
         # x_t follows x_{t-1} with small drift w1
         var_stability = self.sigma**2 + self.w1 + self.obs_noise**2
-        like_stability = stats.norm.pdf(delta, 0.0, np.sqrt(var_stability))
+        like_stability = stats.norm.pdf(delta, loc=0.0, scale=np.sqrt(var_stability))
 
         # Likelihood under change-point
         # x_t is drawn from a wide distribution (large w2)
         var_change = self.obs_noise**2 + self.w2
-        like_change = stats.norm.pdf(delta, 0.0, np.sqrt(var_change))
+        like_change = stats.norm.pdf(delta, loc=0.0, scale=np.sqrt(var_change))
 
         # Bayes rule with hazard rate as prior
         numerator = self.hazard_rate * like_change
@@ -271,6 +277,7 @@ class ChangePointModelVariational(Model):
         # 6. Second-level update (if enabled)
         epsilon2 = 0.0
         alpha2 = 0.0
+
         if self.add_second_level:
             # Get previous change-point probability
             omega_prev = (
@@ -299,7 +306,14 @@ class ChangePointModelVariational(Model):
         # 8. Store history
         self._store_history(delta, omega, alpha, epsilon2, alpha2)
 
-    def _store_history(self, delta, omega, alpha, epsilon2=0.0, alpha2=0.0):
+    def _store_history(
+        self,
+        delta: float,
+        omega: float,
+        alpha: float,
+        epsilon2: float = 0.0,
+        alpha2: float = 0.0,
+    ) -> None:
         """Store trial results in history."""
         row_data = {
             "beliefs": self.mu,
@@ -348,9 +362,6 @@ class ChangePointModelVariational(Model):
             - Epsilon2: Second-level prediction error (ε^(2))
             - Alpha2: Second-level learning rate (α^(2))
         """
-        if self.add_second_level:
-            self.mu2 = 0.0
-            self.sigma2 = 1.0
 
         # Initialize history with first trial (no update)
         initial_data = {
