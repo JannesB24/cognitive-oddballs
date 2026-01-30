@@ -46,12 +46,12 @@ class ChangePointModelVariational(Model):
     sigma0 : float
         Initial uncertainty (σ₀¹)
     obs_noise : float
-        Observation noise standard deviation (s)
+        Observation noise STANDARD DEVIATION (s)
     w1 : float
         Diffusion rate during stability periods (w₁)
         Typical value: 0.01 (small drift)
     w2 : float
-        Change-point variance (w₂)
+        Change-point VARIANCE (w₂)
         Typical value: 100-1000 (large jumps)
     h : float
         Hazard rate - prior probability of change-point (h)
@@ -109,7 +109,7 @@ class ChangePointModelVariational(Model):
 
         # ===== First-level latent states =====
         self.mu = mu0  # μ^(1) - Posterior expectation
-        self.sigma = sigma0  # σ^(1) - Posterior std dev
+        self.sigma = sigma0  # σ^(1) - Posterior STANDARD DEVIATION
 
         # ===== Second-level states (for HGF comparability) =====
         self.add_second_level = add_second_level
@@ -387,52 +387,13 @@ class ChangePointModelVariational(Model):
         for t in range(1, len(observations)):
             self.update(observations[t])
 
-        # Create output DataFrame
-        # df_dict = {
-        #     "Trial": np.arange(1, len(observations) + 1),
-        #     "BagDrop": observations,
-        #     "Belief": self.history["beliefs"].values,
-        #     "CPP": self.history["change_point_probs"].values,
-        #     "Uncertainty": self.history["uncertainties"].values,
-        #     "LearningRate": self.history["learning_rates"].values,
-        #     "PredictionError": self.history["prediction_errors"].values,
-        # }
+        output_columns = ["beliefs", "prediction_errors", "learning_rates"]
 
-        # if self.add_second_level:
-        #     df_dict.update(
-        #         {
-        #             "Mu2": self.history["mu2"].values,
-        #             "Epsilon2": self.history["epsilon2"].values,
-        #             "Alpha2": self.history["alpha2"].values,
-        #         }
-        #     )
+        output = self.history[output_columns].copy()
 
-        # df = pd.DataFrame(df_dict)
+        output["updates"] = self.history["beliefs"].diff().shift(-1)
 
-        # beliefs (Nassar: Belief; Weber: x_0_expected_mean)
-        # observations/targets (location bag drops: Nassar: BagDrop; Weber: x_0_mean; for all models, depends on environment)
-        # responses (are computed in eval)
-        # prediction_errors (Nassar: PredictionError, Weber: x_0_prediction_error)
-        # updates (new belief; Nassar: Belief of t+1; Weber: x_0_expected_mean of t+1)
-        # log_likelihood (computed in eval)
-
-        output_columns = [
-            # "Beliefs",
-            # "Prediction Errors",
-            # "Updates",
-            # "Log Likelihoods",
-        ]
-
-        output = self.history[["beliefs"]]
-
-        rename_dict = {"beliefs": "raw_responses"}
-
-        # output["Beliefs"] = self.history["beliefs"].values
-        # output["Prediction Errors"] = self.history["prediction_errors"].values
-        # output["Updates"] = self.history["beliefs"].shift(-1).values
-        # output["Log Likelihoods"] = self.history["change_point_probs"].values
-
-        return output.rename(columns=rename_dict)
+        return output
 
     # --------------------------------------------------
     # Visualization
@@ -601,7 +562,6 @@ if __name__ == "__main__":
 
     # Initialize CPM model with random walk environment
     cpm_model_walk = ChangePointModelVariational(
-        x=df_random_walk["x"].values,
         mu0=df_random_walk["x"].iloc[0],
         sigma0=25,
         obs_noise=25,

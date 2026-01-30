@@ -35,6 +35,7 @@ import pandas as pd
 from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
 from cognitive_oddballs.models.change_point_model_variational import ChangePointModelVariational
+from cognitive_oddballs.models.change_point_nassar_2016 import ChangePointNassarModel
 from cognitive_oddballs.models.hgf.hgf2_gaussian import HGFPaper2Gaussian
 from cognitive_oddballs.models.model import Model
 from cognitive_oddballs.models.weber_model import WeberModel
@@ -119,39 +120,15 @@ def run_model_on_environment(
     """
     Runs perceptual + response model on a sequence
     """
-    outputs = pd.DataFrame(
-        {
-            "beliefs": pd.Series(dtype=float),
-            "responses": pd.Series(dtype=float),
-            "prediction_errors": pd.Series(dtype=float),
-            "updates": pd.Series(dtype=float),
-            "log_likelihoods": pd.Series(dtype=float),
-        }
-    )
-
     observations = environments["x"].to_numpy()
     output = model.run(observations)
 
     response_model = GaussianResponseModel(0.1)
-    output["responses"] = output["raw_responses"].apply(
-        lambda response: response_model.sample(response)
-    )
+    output["responses"] = output["beliefs"].apply(lambda response: response_model.sample(response))
 
-    # for observation in observations:
-    #     response = response_model.sample(belief)
+    # TODO: Add log likelihoods if needed
 
-    #     pe = observation - belief
-    #     model_fn.update(observation)
-
-    #     ll = response_model.log_likelihood(observation, belief)
-
-    #     outputs["beliefs"].append(belief)
-    #     outputs["responses"].append(response)
-    #     outputs["prediction_errors"].append(pe)
-    #     outputs["updates"].append(model_fn.last_update)
-    #     outputs["log_likelihoods"].append(ll)
-
-    return outputs
+    return output
 
 
 # Experiment runner
@@ -238,7 +215,16 @@ def experiment_changepoint():
 
 def experiment_randomwalk():
     models = {
-        "CPM": ChangePointModelVariational(mu0=250, sigma0=50, obs_noise=5, w1=0.5, w2=0.5, h=0.1),
+        "OG": ChangePointNassarModel(x=[250], sigma_sequence=[25]),
+        "CPM": ChangePointModelVariational(
+            mu0=250,  # Start at center
+            sigma0=25,
+            obs_noise=25,
+            w1=10,  # Higher drift for random walk
+            w2=1000,
+            h=0.1,
+            add_second_level=True,
+        ),
         "gHGF": WeberModel(node4=True, node_4_type="volatility_parent", n4_p=3.0),
         "HGF": HGFPaper2Gaussian(
             eta=0.005, s=15.0**2, mu1_init=0.0, sig1_init=10.0, mu2_init=-4.0, sig2_init=1.0
