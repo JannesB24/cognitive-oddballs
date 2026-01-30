@@ -188,11 +188,8 @@ class HGFPaper2Gaussian(Model):
         for x in observations:
             self.update(x)
 
-        output = self.history[["x_0_expected_mean"]]
-
-        rename_dict = {"x_0_expected_mean": "raw_responses"}
-
-        return output.rename(columns=rename_dict)
+        # Return mu1 as raw_responses (the inferred state)
+        return self.history[["mu1"]].rename(columns={"mu1": "raw_responses"})
 
     # ---------- Plotting (adapted from plot_results in hgf/hgf3.py) ----------
     def plot_results(

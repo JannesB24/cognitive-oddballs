@@ -35,6 +35,7 @@ import pandas as pd
 from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
 from cognitive_oddballs.models.change_point_model_variational import ChangePointModelVariational
+from cognitive_oddballs.models.change_point_nassar_2016 import ChangePointNassarModel
 from cognitive_oddballs.models.hgf.hgf2_gaussian import HGFPaper2Gaussian
 from cognitive_oddballs.models.model import Model
 from cognitive_oddballs.models.weber_model import WeberModel
