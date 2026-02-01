@@ -33,6 +33,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from pyhgf.response import total_gaussian_surprise
+
 from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
 from cognitive_oddballs.models.change_point_model_variational import ChangePointModelVariational
@@ -329,18 +331,6 @@ if __name__ == "__main__":
     #plot_learning_rate_vs_error(results_cp, "Changepoint oddball environment")
 
     # plot_learning_rate_vs_error(results_rw, "Random-walk oddball environment")
-    # wm = WeberModel()
-    # print("indices:", wm.idx_0, wm.idx_1, wm.idx_2, wm.idx_3, wm.idx_4)
-    # print(wm.attributes.keys())
-
-
-    """wm = WeberModel()
-    print("before:", wm.attributes[1]["tonic_volatility"], wm.attributes[3]["tonic_volatility"], wm.attributes[4]["precision"])
-
-    theta_test = np.array([np.log(5.0), np.log(2.0), np.log(3.0)])  # [n4_p, tv_3, tv_1]
-    wm.set_parameters_cma(theta_test)
-
-    print("after:", wm.attributes[1]["tonic_volatility"], wm.attributes[3]["tonic_volatility"], wm.attributes[4]["precision"])"""
 
     param_results_cp, param_results_rw = run_param_optimization(n_envs=5, n_trials=10, seed=42) # TODO: adjust back to 1000, 100
 

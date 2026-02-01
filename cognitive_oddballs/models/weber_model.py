@@ -227,7 +227,7 @@ class WeberModel(Network, Model):
         surprise_vec = self.surprise(
             response_function=total_gaussian_surprise, # TODO: is that the right one to use? I feel like I had this problem when I implemented stuff for the presentation
             response_function_inputs=(),          # no extra inputs
-            response_function_parameters=None,    # no extra params -- possibly 1.0?
+            response_function_parameters=1.0,    # was None before, had noise_eta in Mikus paper implementation
         )
         print(f"Per trial surprise in objective_cma: {surprise_vec}")
 
@@ -242,6 +242,31 @@ class WeberModel(Network, Model):
         print(f"Objective (total surprise) in objective_cma: {total_surprise}")
         total_surprise = surprise_arr.sum()
         return float(total_surprise)
+    
+
+    # def objective_cma(self, observations: np.ndarray) -> float:
+    #     """
+    #     CMA-ES objective: model surprise (negative log probability) given the
+    #     input observations, using pyHGF's built-in Gaussian surprise for
+    #     continuous models.
+
+    #     CMA-ES minimizes this scalar value directly.
+    #     """
+    #     # run the network on the new data
+    #     self.input_data(observations)
+
+    #     # built-in: sum of Gaussian surprise for continuous models
+    #     surprise_value = self.surprise()  # response_function=None by default
+
+    #     # convert to scalar
+    #     surprise_scalar = float(np.asarray(surprise_value))
+
+    #     if not np.isfinite(surprise_scalar):
+    #         raise FloatingPointError(
+    #             f"Non-finite WeberModel surprise: {surprise_scalar}"
+    #         )
+
+    #     return surprise_scalar
 
             
     # TODO: LLM-generated -- verify correctness

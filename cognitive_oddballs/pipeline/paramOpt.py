@@ -174,7 +174,7 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
         ),
         "sigma0": 0.5,  # initial global step-size
         "maxfevals": 5000,  # maximum number of function evaluations
-        "verb_disp": 1,  # verbosity level
+        "verb_disp": 100,  # verbosity level
     }
 
     cma_params_hgf = {
@@ -199,14 +199,14 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
         ),
         "sigma0": 0.5,  # initial global step-size
         "maxfevals": 5000,  # maximum number of function evaluations
-        "verb_disp": 1,  # verbosity level
+        "verb_disp": 100,  # verbosity level
     }
 
     # TODO: auskommentiert for testing, toggle that back when done
     cma_optimization_params = {
-        #ChangePointModelVariational: cma_params_cmp,
+        ChangePointModelVariational: cma_params_cmp,
         #HGFPaper2Gaussian: cma_params_hgf,
-        WeberModel: cma_params_weber,
+        #WeberModel: cma_params_weber,
     }
 
     logger.info("Optimizing models on Change Point Environments")

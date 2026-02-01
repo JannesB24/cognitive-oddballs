@@ -93,8 +93,16 @@ class ChangePointModelVariational(Model):
     >>> results = model.run()
     >>> print(results[['Trial', 'Belief', 'LearningRate']].head())
     """
-
-    def __init__(self, mu0, sigma0, obs_noise, w1, w2, h, add_second_level=True):
+    def __init__(
+            self, 
+            mu0 = 0.0, # just needed to put any default parameters here for eval to work. they'll be overwritten anyway - R.
+            sigma0 = 25.0, 
+            obs_noise = 25.0, 
+            w1 = 0.01, 
+            w2 = 100.0, 
+            h = 0.1, 
+            add_second_level=True
+        ):
         # ===== Perceptual free parameters =====
         self.mu0 = mu0  # μ₀¹ - Initial belief
         self.sigma0 = sigma0  # σ₀¹ - Initial uncertainty
