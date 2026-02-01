@@ -6,42 +6,32 @@ from cognitive_oddballs.models.model import Model
 
 
 class WeberModel(Network, Model):
-    def __init__(self, node4=True, node_4_type="volatility_parent", n4_p=3.0):
+    def __init__(self, node3=False, n0_tv=5,n1_tv=0,n2_tv=0, update_type="eHGF"):
         """A subclass of the pyhfg Network class.
-        Each Instance is a set network of either 4 or 5 Nodes (node 4 can be left out for
+        Each Instance is a set network of either 3 or 4 Nodes (4th node can be left out for
         experimental purposes):
             Node 0: Continous input Node
             Node 1: Value Parent of Node 0
             Node 2: Volatility Parent of Node 1
             Node 3: Volatility Parent of Node 0
-            Node 4: Volatility Parent of Node 3
 
             Input:
             - input: (optional) a Dataframe containing observations (in a column named 'x'),
             to which the model is fit immediately.
-            - node4: A Boolean indicating whether the model contains node 4 (default true)
+            - node3: A Boolean indicating whether the model contains node 3 (default False)
             - node_4_type: a string indicating whether node 4 is supposed to be a value parent or
               a volatility parent (default volatility parent)
             - n4_p: precision of node 4, if used (default 3, as that was the sweetspot for model
               performance in both environments)
 
         """
-        super().__init__()
-        self.add_nodes(mean=250, tonic_volatility=5, autoconnection_strength=0.5)
+        super().__init__(update_type=update_type)
+        self.add_nodes(mean=250, tonic_volatility=5, autoconnection_strength=0)
         self.add_nodes(mean=250, value_children=0)
-        self.add_nodes(volatility_children=1)
-        self.add_nodes(volatility_children=0)
-        if node4:
-            if node_4_type not in ["volatility_parent", "value_parent"]:
-                raise ValueError(
-                    "node_4_type has to be either 'volatility_parent' or 'value_parent'."
-                )
-            elif node_4_type == "volatility_parent":
-                self.add_nodes(
-                    precision=n4_p, volatility_children=3
-                )  # jump from precison 3 to 4 made it give up earlier in random walk environment
-            else:
-                self.add_nodes(precision=n4_p, value_children=3)
+        self.add_nodes(mean=15,volatility_children=1)
+        if node3:
+            self.add_nodes(mean=40,volatility_children=0)
+
 
     # precision 3 seems to be the sweet spot so far, such that the first 500 trials can be predicted
     # and are shown in graph (more trials still not working)
