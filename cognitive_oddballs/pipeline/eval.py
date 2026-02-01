@@ -194,7 +194,7 @@ def run_experiment(
 
 def experiment_changepoint():
     models: dict[str, Model] = {
-        "CPM": ChangePointModelVariational(mu0=250, sigma0=50, obs_noise=5, w1=0.5, w2=0.5, h=0.1),
+        "CPM": ChangePointModelVariational(mu0=250, sigma0=50, obs_noise_std=25, w1_std=0.1, w2_std=30, h=0.1),
         "gHGF": WeberModel(node4=True, node_4_type="volatility_parent", n4_p=3.0),
         "HGF": HGFPaper2Gaussian(
             eta=0.005, s=15.0**2, mu1_init=0.0, sig1_init=10.0, mu2_init=-4.0, sig2_init=1.0
@@ -219,9 +219,9 @@ def experiment_randomwalk():
         "CPM": ChangePointModelVariational(
             mu0=250,  # Start at center
             sigma0=25,
-            obs_noise=25,
-            w1=10,  # Higher drift for random walk
-            w2=1000,
+            obs_noise_std=25,
+            w1_std=3.16,  # Higher drift for random walk
+            w2_std=30, # Does not matter for RW
             h=0.1,
             add_second_level=True,
         ),
