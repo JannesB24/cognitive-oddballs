@@ -1,21 +1,21 @@
 from abc import ABC, abstractmethod
 
 import numpy as np
+import pandas as pd
 
 
 class Model(ABC):
     """Abstract class to define the mode interface."""
 
     @abstractmethod
-    def run(self, observations: np.ndarray):
+    def run(self, observations: np.ndarray) -> pd.DataFrame:
         """
-        Run the model.
+        Run the model on each observation in sequence.
 
         Args:
-            *args: Variable length argument list.
-            **kwargs: Arbitrary keyword arguments.
+            observations (np.ndarray): Input observations for the model.
 
         Returns:
-            Model output.
+            pd.DataFrame: Relevant model outputs as a pandas DataFrame.
         """
         pass
