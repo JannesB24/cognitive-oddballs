@@ -1,9 +1,12 @@
 import numpy as np
+import pandas as pd
 from pyhgf.model import Network
 
+from cognitive_oddballs.models.model import Model
 
-class WeberModel(Network):
-    def __init__(self, input=None, node4=True, node_4_type="volatility_parent", n4_p=3.0):
+
+class WeberModel(Network, Model):
+    def __init__(self, node4=True, node_4_type="volatility_parent", n4_p=3.0):
         """A subclass of the pyhfg Network class.
         Each Instance is a set network of either 4 or 5 Nodes (node 4 can be left out for
         experimental purposes):
@@ -39,14 +42,21 @@ class WeberModel(Network):
                 )  # jump from precison 3 to 4 made it give up earlier in random walk environment
             else:
                 self.add_nodes(precision=n4_p, value_children=3)
-        if input is not None:
-            self.input_data(input["x"].to_numpy())
 
     # precision 3 seems to be the sweet spot so far, such that the first 500 trials can be predicted
     # and are shown in graph (more trials still not working)
     # -> dicotomy between two environments with random walk environment giving up earlier with
     # higher preciscion
     # -> works fine if node 4 is removed
+
+    def run(self, observations: np.ndarray) -> pd.DataFrame:
+        self.input_data(observations)
+
+        output = self.to_pandas()[["x_0_expected_mean"]]
+
+        rename_dict = {"x_0_expected_mean": "raw_responses"}
+
+        return output.rename(columns=rename_dict)
 
     # both fitting functions currently the same, but should maybe stay separate for usability
     def fit_to_change_point_oddball_environment(self, df):
