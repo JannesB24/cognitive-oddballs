@@ -580,6 +580,7 @@ if __name__ == "__main__":
 
     # Initialize CPM model with random walk environment
     cpm_model_walk = ChangePointModelVariational(
+        x=df_random_walk["x"].values,
         mu0=df_random_walk["x"].iloc[0],
         sigma0=25,
         obs_noise_std=25,

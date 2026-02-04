@@ -84,23 +84,22 @@ def set_seed(seed: int = 42):
 
 # Model constructor function
 def make_model(
-    model_cls, params, observations, *, obs_noise=25.0, sigma0=25.0, add_second_level=True
+    model_cls, params, observations, *, obs_noise_std=25.0, sigma0=25.0, add_second_level=True
 ):
     if model_cls.__name__ == "ChangePointModelVariational":
         params = np.asarray(params, dtype=float).ravel()
         if params.size != 3:
             raise ValueError(f"CPM params must be (w1,w2,h). Got {params}")
 
-        w1, w2, h = map(float, params)
+        w1_std, w2_std, h = map(float, params)
 
         mu0 = float(observations[0])  # common choice for sanity checks
         return model_cls(
-            observations,
             mu0=mu0,
             sigma0=float(sigma0),
-            obs_noise=float(obs_noise),
-            w1=w1,
-            w2=w2,
+            obs_noise_std=float(obs_noise_std),
+            w1_std=w1_std,
+            w2_std=w2_std,
             h=h,
             add_second_level=add_second_level,
         )
@@ -147,67 +146,66 @@ def get_observations(env_out):
 
 
 # Model constructor function
-def make_model(
-    model_cls, params, observations, *, obs_noise=25.0, sigma0=25.0, add_second_level=True
-):
-    if model_cls.__name__ == "ChangePointModelVariational":
-        params = np.asarray(params, dtype=float).ravel()
-        if params.size != 3:
-            raise ValueError(f"CPM params must be (w1,w2,h). Got {params}")
+# def make_model(
+#     model_cls, params, observations, *, obs_noise_std=25.0, sigma0=25.0, add_second_level=True
+# ):
+#     if model_cls.__name__ == "ChangePointModelVariational":
+#         params = np.asarray(params, dtype=float).ravel()
+#         if params.size != 3:
+#             raise ValueError(f"CPM params must be (w1,w2,h). Got {params}")
 
-        w1, w2, h = map(float, params)
+#         w1_std, w2_std, h = map(float, params)
 
-        mu0 = float(observations[0])  # common choice for sanity checks
-        return model_cls(
-            observations,
-            mu0=mu0,
-            sigma0=float(sigma0),
-            obs_noise=float(obs_noise),
-            w1=w1,
-            w2=w2,
-            h=h,
-            add_second_level=add_second_level,
-        )
-    # HGF (eta, s)
-    return model_cls(*params)
+#         mu0 = float(observations[0])  # common choice for sanity checks
+#         return model_cls(
+#             mu0=mu0,
+#             sigma0=float(sigma0),
+#             obs_noise_std=float(obs_noise_std),
+#             w1_std=w1_std,
+#             w2_std=w2_std,
+#             h=h,
+#             add_second_level=add_second_level,
+#         )
+#     # HGF (eta, s)
+#     return model_cls(*params)
 
 
-# Environments output normalization
-def get_observations(env_out):
-    """
-    Normalize environment output to a 1D numpy array of observations (shape (T,)).
-    Supports:
-      - pandas DataFrame with column 'x' or 'o' (preferred)
-      - dict with key 'x' or 'o' or 'observations'
-      - tuple/list where first element is the observation array
-      - array-like already 1D
-    """
-    # pandas DataFrame
-    if hasattr(env_out, "columns"):
-        if "x" in env_out.columns:
-            return np.asarray(env_out["x"].values, dtype=float).ravel()
-        if "o" in env_out.columns:
-            return np.asarray(env_out["o"].values, dtype=float).ravel()
-        # fall back: first column
-        return np.asarray(env_out.iloc[:, 0].values, dtype=float).ravel()
+# # Environments output normalization
+# def get_observations(env_out):
+#     """
+#     Normalize environment output to a 1D numpy array of observations (shape (T,)).
+#     Supports:
+#       - pandas DataFrame with column 'x' or 'o' (preferred)
+#       - dict with key 'x' or 'o' or 'observations'
+#       - tuple/list where first element is the observation array
+#       - array-like already 1D
+#     """
+#     # pandas DataFrame
+#     if hasattr(env_out, "columns"):
+#         if "x" in env_out.columns:
+#             return np.asarray(env_out["x"].values, dtype=float).ravel()
+#         if "o" in env_out.columns:
+#             return np.asarray(env_out["o"].values, dtype=float).ravel()
+#         # fall back: first column
+#         return np.asarray(env_out.iloc[:, 0].values, dtype=float).ravel()
 
-    # dict
-    if isinstance(env_out, dict):
-        for key in ("x", "o", "observations"):
-            if key in env_out:
-                return np.asarray(env_out[key], dtype=float).ravel()
-        raise KeyError(f"Env dict keys: {list(env_out.keys())}")
+#     # dict
+#     if isinstance(env_out, dict):
+#         for key in ("x", "o", "observations"):
+#             if key in env_out:
+#                 return np.asarray(env_out[key], dtype=float).ravel()
+#         raise KeyError(f"Env dict keys: {list(env_out.keys())}")
 
-    # tuple/list
-    if isinstance(env_out, (tuple, list)):
-        return np.asarray(env_out[0], dtype=float).ravel()
+#     # tuple/list
+#     if isinstance(env_out, (tuple, list)):
+#         return np.asarray(env_out[0], dtype=float).ravel()
 
-    # array-like
-    arr = np.asarray(env_out, dtype=float)
-    if arr.ndim != 1:
-        # if it's 2D, try first column
-        arr = arr[:, 0]
-    return arr.ravel()
+#     # array-like
+#     arr = np.asarray(env_out, dtype=float)
+#     if arr.ndim != 1:
+#         # if it's 2D, try first column
+#         arr = arr[:, 0]
+#     return arr.ravel()
 
 
 # Response likelihood
