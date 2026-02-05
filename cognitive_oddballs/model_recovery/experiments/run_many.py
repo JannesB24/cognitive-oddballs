@@ -9,7 +9,7 @@ Runs many independent model‑recovery simulations, builds a confusion matrix,
 collects parameter‑recovery statistics and finally produces the three classic
 figures from Marković & Kiebel (2016).
 
-The script now imports the plotting helpers from ``model_recovery.plots`` and
+The script imports the plotting helpers from ``model_recovery.plots`` and
 writes the images to *figures/<environment_name>/*.
 """
 
@@ -192,7 +192,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------
     # Run the Monte‑Carlo recovery
     # ------------------------------------------------------------------
-    n_sims = 200                # feel free to increase this for a final paper
+    n_sims = 200                
     env_name = "changepoint"
     env_fn = generate_change_point_environment
 
@@ -207,7 +207,7 @@ if __name__ == "__main__":
     )
 
     # ------------------------------------------------------------------
-    # 4️.  Textual summaries (as before)
+    # 4️.  Textual summaries 
     # ------------------------------------------------------------------
     confusion_matrix(winners)
     param_recovery_stats(param_pairs)

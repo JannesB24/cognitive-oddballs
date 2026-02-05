@@ -34,7 +34,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # ----------------------------------------------------------------------
-# 1️⃣ Confusion matrix (heat‑map)
+# 1️. Confusion matrix (heat‑map)
 # ----------------------------------------------------------------------
 def plot_confusion_matrix(
     winners: Dict[str, Dict[str, int]],
@@ -103,7 +103,7 @@ def plot_confusion_matrix(
 
 
 # ----------------------------------------------------------------------
-# 2️⃣ Parameter‑recovery scatter plots (one panel per model)
+# 2️. Parameter‑recovery scatter plots (one panel per model)
 # ----------------------------------------------------------------------
 def plot_parameter_recovery(
     param_pairs: Dict[str, List[Tuple[np.ndarray, np.ndarray]]],
@@ -200,7 +200,7 @@ def plot_parameter_recovery(
 
 
 # ----------------------------------------------------------------------
-# 3️⃣ Distribution of model‑selection scores (BIC or log‑evidence)
+# 3️. Distribution of model‑selection scores (BIC or log‑evidence)
 # ----------------------------------------------------------------------
 def plot_score_distributions(
     results: Dict[str, Dict[str, Dict[str, float]]],
@@ -308,7 +308,7 @@ def plot_score_distributions(
 
 
 # ----------------------------------------------------------------------
-# 4️⃣ Helper to generate *all* figures at once (convenient for notebooks)
+# 4️. Helper to generate *all* figures at once (convenient for notebooks)
 # ----------------------------------------------------------------------
 def make_all_plots(
     winners: Dict[str, Dict[str, int]],
