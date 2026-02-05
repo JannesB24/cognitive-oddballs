@@ -9,11 +9,13 @@ Based on Marković & Kiebel (2016)
 from collections.abc import Callable
 
 import numpy as np
+import warnings
 
 from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
 from cognitive_oddballs.models.change_point_model_variational import ChangePointModelVariational
-from cognitive_oddballs.models.hgf.hgf2_gaussian import HGFPaper2Gaussian
+from cognitive_oddballs.models.hgf.hgf2_gaussian import HGFPaper2Gaussian, HGF2Config, exp_clip
+import pandas as pd
 
 # TODO: What’s left to do for real model recovery
 
@@ -54,7 +56,100 @@ from cognitive_oddballs.models.hgf.hgf2_gaussian import HGFPaper2Gaussian
 # Add priors and/or Hessian regularization
 
 # Otherwise stick to BIC
+class PatchedHGF(HGFPaper2Gaussian):
+    """
+    A patched version of HGFPaper2Gaussian that avoids inefficient concatenation
+    and correctly handles initialization to prevent AttributeErrors.
+    """
+    def __init__(self,
+                 eta: float,
+                 s: float,
+                 mu1_init: float = 0.0,
+                 sig1_init: float = 1.0,
+                 mu2_init: float = 0.0,
+                 sig2_init: float = 1.0,
+                 min_var: float = 1e-8,
+                 exp_clip_value: float = 60.0,
+                 **kwargs): # Added **kwargs for robustness
+        
+        # We are taking over initialization completely, so we DO NOT call super().__init__()
+        
+        # 1. Copy the setup logic from the original HGFPaper2Gaussian.__init__
+        self.cfg = HGF2Config(
+            mu1_0=float(mu1_init), sig1_0=float(sig1_init),
+            mu2_0=float(mu2_init), sig2_0=float(sig2_init),
+            eta=float(eta), s=float(s),
+            min_var=float(min_var), exp_clip_value=float(exp_clip_value),
+        )
 
+        if self.cfg.eta <= 0:
+            raise ValueError("eta must be > 0")
+        if self.cfg.s <= 0:
+            raise ValueError("s (observation variance) must > 0")
+
+        self.mu1 = self.cfg.mu1_0
+        self.sig1 = max(self.cfg.sig1_0, self.cfg.min_var)
+        self.mu2 = self.cfg.mu2_0
+        self.sig2 = max(self.cfg.sig2_0, self.cfg.min_var)
+        self.trial = 0
+
+        # 2. This is the crucial change: instead of creating a DataFrame, we create our list.
+        self.history_list = []
+
+    @property
+    def history(self):
+        """
+        This read-only property makes our class compatible with inherited methods
+        (like plot_results) that expect `self.history` to be a DataFrame.
+        It builds the DataFrame on-the-fly from our efficient list.
+        """
+        # Caching the result for performance is a good idea
+        if not hasattr(self, '_history_cache') or len(self._history_cache) != len(self.history_list):
+            self._history_cache = pd.DataFrame(self.history_list)
+        return self._history_cache
+
+    def update(self, o: float) -> None:
+        """
+        This overridden method is the same as before, populating the history_list.
+        """
+        o = float(o)
+        minvar = self.cfg.min_var
+
+        # --- Prediction (Copied directly from original) ---
+        mu2_hat = self.mu2
+        sig2_hat = max(self.sig2 + self.cfg.eta, minvar)
+        omega = exp_clip(mu2_hat, self.cfg.exp_clip_value)
+        mu1_prev = self.mu1
+        sig1_prev = self.sig1
+        den1 = max(sig1_prev + omega, minvar)
+
+        # --- Update Level 1 (Copied directly from original) ---
+        delta1 = o - mu1_prev
+        sig1_new = 1.0 / max((1.0 / self.cfg.s) + (1.0 / den1), minvar)
+        alpha1 = sig1_new / max(self.cfg.s, minvar)
+        eps1 = alpha1 * delta1
+        mu1_new = mu1_prev + eps1
+
+        # --- Update Level 2 (Copied directly from original) ---
+        delta2 = (sig1_new + eps1 * eps1) / den1 - 1.0
+        k = omega / den1
+        r = (omega - sig1_prev) / den1
+        pi2 = (1.0 / sig2_hat) + 0.5 * k * (k + r * delta2)
+        sig2_new = 1.0 / max(pi2, minvar)
+        mu2_new = mu2_hat + 0.5 * max(sig2_new, minvar) * k * delta2
+
+        # --- State update of the model (Copied directly from original) ---
+        self.mu1, self.mu2 = mu1_new, mu2_new
+        self.sig1, self.sig2 = sig1_new, sig2_new
+        
+        # --- EFFICIENT HISTORY LOGGING ---
+        row_dict = {
+            "o": o, "mu1_hat": mu1_prev, "sig1_hat": den1, "mu1": self.mu1,
+            "sig1": self.sig1, "mu2_hat": mu2_hat, "sig2_hat": sig2_hat,
+            "mu2": self.mu2, "sig2": self.sig2, "omega": omega, "delta1": delta1,
+            "alpha1": alpha1, "delta2": delta2, "k": k, "r": r,
+        }
+        self.history_list.append(row_dict)
 
 # Utilities and helper functions
 def model_n_params(model_cls) -> int:
@@ -62,7 +157,7 @@ def model_n_params(model_cls) -> int:
     if model_cls.__name__ == "ChangePointModelVariational":
         return 3  # w1, w2, h
     # HGFPaper2Gaussian has 2 core params: eta, s
-    if model_cls.__name__ == "HGFPaper2Gaussian":
+    if model_cls.__name__ in ("HGFPaper2Gaussian", "PatchedHGF"):
         return 2
     raise AttributeError(f"Unknown n_params for {model_cls.__name__}")
 
@@ -237,6 +332,19 @@ def run_model_on_environment(
 
             model.update(obs)
 
+
+            responses[t] = (
+                (mu + np.random.randn() * sigma_r)
+                if generate_responses
+                else float(fixed_responses[t])
+            )
+
+        return {
+            "beliefs": beliefs,
+            "responses": responses,
+            "prediction_errors": prediction_errors,
+            "updates": updates,
+        }
 # MLE grid search + BIC
 
 
@@ -250,8 +358,7 @@ def grid_search_mle(model_cls, param_grid, observations, responses, sigma_r):
 
     for params in param_grid:
         model = make_model(model_cls, params, observations)
-        model = make_model(model_cls, params, observations)
-
+        
         outputs = run_model_on_environment(
             model, observations, sigma_r, generate_responses=False, fixed_responses=responses
         )
@@ -375,10 +482,7 @@ def model_recovery_per_env(
         env_out = environment_fn(n_trials=n_trials)
         observations = get_observations(env_out)
         true_model = make_model(true_model_cls, true_params[true_name], observations)
-        env_out = environment_fn(n_trials=n_trials)
-        observations = get_observations(env_out)
-        true_model = make_model(true_model_cls, true_params[true_name], observations)
-
+       
         synth = run_model_on_environment(true_model, observations, sigma_r, generate_responses=True)
 
         responses = synth["responses"]
@@ -417,7 +521,7 @@ def model_recovery_per_env(
 
 
 def modelrec_changepoint():
-    models = {"CPM": ChangePointModelVariational, "HGF": HGFPaper2Gaussian}
+    models = {"CPM": ChangePointModelVariational, "HGF": PatchedHGF}
     
     # ---- True params must match make_model() ordering ----
     # CPM expects (w1, w2, h) after x (and possibly others depending on your __init__)
@@ -503,7 +607,7 @@ def fast_sanity_check():
     n_trials = 50
     sigma_r = 2.0
 
-    models = {"CPM": ChangePointModelVariational, "HGF": HGFPaper2Gaussian}
+    models = {"CPM": ChangePointModelVariational, "HGF": PatchedHGF}
 
     # True params (just placeholders for sanity)
     true_params = {
@@ -702,7 +806,7 @@ if __name__ == "__main__":
 
     models = {
         "CPM": ChangePointModelVariational,
-        "HGF": HGFPaper2Gaussian,
+        "HGF": PatchedHGF,
     }
 
     # ----- parameter grids -----
