@@ -99,13 +99,13 @@ class ChangePointModelVariational(Model):
         self,
         mu0: float,
         sigma0: float,
-        obs_noise: float,
-        w1: float,
-        w2: float,
+        obs_noise_std: float,  # std dev
+        w1_std: float,  # std dev
+        w2_std: float,  # std dev
         h: float,
         add_second_level: bool = True,
     ) -> None:
-        # ===== Perceptual free parameters =====
+        # Perceptual free parameters
         self.mu0 = mu0  # μ₀¹ - Initial belief
         self.sigma0 = sigma0  # σ₀¹ - Initial uncertainty
         self.obs_noise = obs_noise_std  # s - Observation noise (std dev)
@@ -131,13 +131,14 @@ class ChangePointModelVariational(Model):
             self.mu2 = 0.0  # μ^(2) - Volatility (log-odds of Ω)
             self.sigma2 = 1.0  # σ^(2) - Second-level uncertainty
 
-        # ===== History tracking =====
+        # History tracking
         columns = [
             "beliefs",  # μ^(1)
             "prediction_errors",  # δ_t
             "learning_rates",  # α^(1)
             "uncertainties",  # σ^(1)
             "change_point_probs",  # Ω_t
+            "variational_free_energy",  # Variational free energy
         ]
 
         if add_second_level:
@@ -147,15 +148,8 @@ class ChangePointModelVariational(Model):
                     "epsilon2",  # ε^(2) - Second-level prediction error
                     "alpha2",  # α^(2) - Second-level learning rate
                 ]
-            columns.extend(
-                [
-                    "mu2",  # μ^(2)
-                    "epsilon2",  # ε^(2) - Second-level prediction error
-                    "alpha2",  # α^(2) - Second-level learning rate
-                ]
             )
 
-        self.history = pd.DataFrame(columns=columns)
         self.history = pd.DataFrame(columns=columns)
 
     # --------------------------------------------------
@@ -279,15 +273,18 @@ class ChangePointModelVariational(Model):
         t : int
             Trial index
         """
+        mu1_prev = self.mu
+        sigma1_prev = self.sigma
+
         # 1. Prediction error
-        delta = observation - self.mu
+        delta = observation - mu1_prev
 
         # 2. Change-point probability (Bayes rule)
         omega = self._change_point_probability(delta)
 
         # 3. Update posterior uncertainty (inverse variance form)
         # This is the key equation that links change-points to learning
-        inv_sigma_squared = (1 - omega) / (self.sigma**2 + self.w1_var) + 1 / self.obs_noise_var
+        inv_sigma_squared = (1 - omega) / (sigma1_prev**2 + self.w1_var) + 1 / self.obs_noise_var
         # NaN PREVENTION (in case of zero division)
         inv_sigma_squared = np.maximum(inv_sigma_squared, 1e-10)
         sigma_new = 1 / np.sqrt(inv_sigma_squared)
@@ -297,7 +294,7 @@ class ChangePointModelVariational(Model):
         alpha = np.clip(alpha, 0.0, 1.0)  # Ensure valid range
 
         # 5. Update posterior expectation (delta rule)
-        mu_new = self.mu + alpha * delta
+        mu_new = mu1_prev + alpha * delta
         mu_new = np.clip(mu_new, 0, 500)  # Clip to valid screen range
 
         # 6. Second-level update (if enabled)
@@ -329,8 +326,10 @@ class ChangePointModelVariational(Model):
         self.mu = mu_new
         self.sigma = sigma_new
 
+        free_energy = self.calc_variational_free_energy(observation, mu1_prev, sigma1_prev)
+
         # 8. Store history
-        self._store_history(delta, omega, alpha, epsilon2, alpha2)
+        self._store_history(delta, omega, alpha, epsilon2, alpha2, free_energy)
 
     def _store_history(
         self,
@@ -339,6 +338,7 @@ class ChangePointModelVariational(Model):
         alpha: float,
         epsilon2: float = 0.0,
         alpha2: float = 0.0,
+        free_energy: float = 0.0,
     ) -> None:
         """Store trial results in history."""
         row_data = {
@@ -347,6 +347,7 @@ class ChangePointModelVariational(Model):
             "learning_rates": alpha,
             "uncertainties": self.sigma,
             "change_point_probs": omega,
+            "variational_free_energy": free_energy,
         }
 
         if self.add_second_level:
@@ -359,6 +360,37 @@ class ChangePointModelVariational(Model):
             )
 
         self.history = pd.concat([self.history, pd.DataFrame([row_data])], ignore_index=True)
+
+    def calc_variational_free_energy(
+        self, observation: float, mu1_prev: float, sigma1_prev: float
+    ) -> float:
+        """
+        Calculate variational free energy for the current state.
+
+        Returns
+        -------
+        float
+            Variational free energy
+        """
+        stability_normal = stats.norm.pdf(
+            x=observation,
+            loc=mu1_prev,
+            scale=np.sqrt(sigma1_prev**2 + self.w1_var + self.obs_noise_var),
+        )
+
+        stability_normal *= 1 - self.hazard_rate
+
+        change_normal = stats.norm.pdf(
+            observation, loc=0.0, scale=np.sqrt(self.obs_noise_var + self.w2_var)
+        )
+
+        change_normal *= self.hazard_rate
+
+        likelihood = stability_normal + change_normal
+        likelihood = np.maximum(likelihood, 1e-10)  # Prevent log(0)
+        free_energy = np.log(likelihood)
+
+        return free_energy
 
     # --------------------------------------------------
 
@@ -387,6 +419,7 @@ class ChangePointModelVariational(Model):
             - Mu2: Second-level belief (μ^(2))
             - Epsilon2: Second-level prediction error (ε^(2))
             - Alpha2: Second-level learning rate (α^(2))
+            - FreeEnergy: Variational free energy
         """
 
         # Initialize history with first trial (no update)
@@ -396,6 +429,7 @@ class ChangePointModelVariational(Model):
             "learning_rates": 0.0,
             "uncertainties": self.sigma,
             "change_point_probs": 0.0,
+            "variational_free_energy": 0.0,
         }
 
         if self.add_second_level:
@@ -409,11 +443,16 @@ class ChangePointModelVariational(Model):
 
         self.history = pd.DataFrame([initial_data])
 
-        # Run updates for trials 1 to T-1
-        for t in range(1, len(observations)):
+        # Run updates for trials 0 to T-1
+        for t in range(0, len(observations)):
             self.update(observations[t])
 
-        output_columns = ["beliefs", "prediction_errors", "learning_rates"]
+        output_columns = [
+            "beliefs",
+            "prediction_errors",
+            "learning_rates",
+            "variational_free_energy",
+        ]
 
         output = self.history[output_columns].copy()
 

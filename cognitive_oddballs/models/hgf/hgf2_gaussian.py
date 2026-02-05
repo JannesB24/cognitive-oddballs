@@ -17,17 +17,6 @@ def exp_clip(x: Number, clip: float = 60.0) -> float:
     return float(np.exp(np.clip(float(x), -clip, clip)))
 
 
-def sigmoid_stable(x: Number) -> float:
-    """Numerically stable sigmoid."""
-    x = float(x)
-    if x >= 0:
-        z = np.exp(-x)
-        return float(1.0 / (1.0 + z))
-    else:
-        z = np.exp(x)
-        return float(z / (1.0 + z))
-
-
 @dataclass
 class HGF2Config:
     # Core HGF parameters
@@ -46,6 +35,17 @@ class HGF2Config:
     # Numerical stability
     min_var: float = 1e-8
     exp_clip_value: float = 30.0
+
+    def __post_init__(self):
+        """Validate parameters after initialization."""
+        if self.eta <= 0:
+            raise ValueError("eta must be > 0")
+        if self.s <= 0:
+            raise ValueError("s (observation variance) must be > 0")
+        if self.sig1_0 < self.min_var:
+            raise ValueError(f"sig1_0 must be >= {self.min_var}")
+        if self.sig2_0 < self.min_var:
+            raise ValueError(f"sig2_0 must be >= {self.min_var}")
 
 
 class HGFPaper2Gaussian(Model):
@@ -78,38 +78,24 @@ class HGFPaper2Gaussian(Model):
             exp_clip_value=float(exp_clip_value),
         )
 
-        if self.cfg.eta <= 0:
-            raise ValueError("eta must be > 0")
-        if self.cfg.s <= 0:
-            raise ValueError("s (observation variance) must > 0")
-
         # current posteriors
         self.mu1 = self.cfg.mu1_0
-        self.sig1 = max(self.cfg.sig1_0, self.cfg.min_var)
+        self.sig1 = self.cfg.sig1_0
         self.mu2 = self.cfg.mu2_0
-        self.sig2 = max(self.cfg.sig2_0, self.cfg.min_var)
-
-        # trial counter
-        self.trial = 0
+        self.sig2 = self.cfg.sig2_0
 
         # Initialize history as DataFrame
-        self.history = pd.DataFrame(
+        self.history: pd.DataFrame = pd.DataFrame(
             columns=[
                 "o",
-                "mu1_hat",
-                "sig1_hat",
-                "mu1",
-                "sig1",
-                "mu2_hat",
-                "sig2_hat",
-                "mu2",
-                "sig2",
-                "omega",  # exp(mu2_hat)
-                "delta1",
-                "alpha1",
-                "delta2",
-                "k",
-                "r",
+                "mu1",  # posterior mean level 1 after update -> belief about x1_t
+                "sig1",  # posterior variance level 1 after update -> uncertainty about x1_t
+                "mu2",  # posterior mean level 2 after update -> belief about x2_t
+                "sig2",  # posterior variance level 2 after update -> uncertainty about x2_t
+                "delta1",  # prediction error level 1
+                "alpha1",  # learning rate level 1
+                "delta2",  # prediction error level 2
+                "vfe",  # variational free energy: calculated after update
             ]
         )
 
@@ -119,11 +105,11 @@ class HGFPaper2Gaussian(Model):
 
         # ----------- Prediction -----------------
         # Level 2
-        mu2_hat = self.mu2
-        sig2_hat = max(self.sig2 + self.cfg.eta, minvar)
+        mu2_prev = self.mu2
+        sig2_prev = max(self.sig2 + self.cfg.eta, minvar)
         # Level 1
-        # omega = exp(mu2_hat)
-        omega = exp_clip(mu2_hat, self.cfg.exp_clip_value)
+        # omega = exp(mu2_prev)
+        omega = exp_clip(mu2_prev, self.cfg.exp_clip_value)
 
         mu1_prev = self.mu1
         sig1_prev = self.sig1
@@ -152,44 +138,168 @@ class HGFPaper2Gaussian(Model):
         r = (omega - sig1_prev) / den1
 
         # precision
-        pi2 = (1.0 / sig2_hat) + 0.5 * k * (k + r * delta2)
+        pi2 = (1.0 / sig2_prev) + 0.5 * k * (k + r * delta2)
 
         # posterior update
         sig2_new = 1.0 / max(pi2, minvar)
-        mu2_new = mu2_hat + 0.5 * max(sig2_new, minvar) * k * delta2
+        mu2_new = mu2_prev + 0.5 * max(sig2_new, minvar) * k * delta2
 
         # state update of the model
         self.mu1, self.mu2 = mu1_new, mu2_new
         self.sig1, self.sig2 = sig1_new, sig2_new
 
-        # Log - append row to DataFrame
-        row = pd.DataFrame(
-            {
-                "o": [o],
-                "mu1_hat": [mu1_prev],
-                "sig1_hat": [den1],
-                "mu1": [self.mu1],
-                "sig1": [self.sig1],
-                "mu2_hat": [mu2_hat],
-                "sig2_hat": [sig2_hat],
-                "mu2": [self.mu2],
-                "sig2": [self.sig2],
-                "omega": [omega],
-                "delta1": [delta1],
-                "alpha1": [alpha1],
-                "delta2": [delta2],
-                "k": [k],
-                "r": [r],
-            }
+        variational_free_energy = self.calc_variational_free_energy(
+            observation=o,
+            mu1_prev=mu1_prev,
+            sigma1_prev=sig1_prev,
+            mu2_prev=mu2_prev,
+            sigma2_prev=sig2_prev,
         )
-        self.history = pd.concat([self.history, row], ignore_index=True)
+
+        # Log - append row to DataFrame
+        row_data = {
+            "o": o,
+            "mu1": mu1_prev,
+            "sig1": sig1_prev,
+            "mu2": mu2_prev,
+            "sig2": sig2_prev,
+            "delta1": delta1,
+            "alpha1": alpha1,
+            "delta2": delta2,
+            "vfe": variational_free_energy,
+        }
+
+        self.history = pd.concat([self.history, pd.DataFrame([row_data])], ignore_index=True)
 
     def run(self, observations: np.ndarray) -> pd.DataFrame:
+        initial_data = {
+            "o": 0.0,
+            "mu1": self.cfg.mu1_0,
+            "sig1": self.cfg.sig1_0,
+            "mu2": self.cfg.mu2_0,
+            "sig2": self.cfg.sig2_0,
+            "delta1": 0.0,
+            "alpha1": 0.0,
+            "delta2": 0.0,
+            "vfe": 0.0,
+        }
+
+        self.history = pd.DataFrame([initial_data])
+
         for x in observations:
             self.update(x)
 
-        # Return mu1 as raw_responses (the inferred state)
-        return self.history[["mu1"]].rename(columns={"mu1": "raw_responses"})
+        output = self.history[["mu1", "delta1", "alpha1", "vfe"]].copy()
+
+        output["updates"] = self.history["mu1"].diff().shift(-1)
+
+        output = output.rename(
+            columns={
+                "mu1": "beliefs",
+                "delta1": "prediction_errors",
+                "alpha1": "learning_rates",
+                "vfe": "variational_free_energy",
+            }
+        )
+
+        return output
+
+    def calc_variational_free_energy(
+        self,
+        observation: float,
+        mu1_prev: float,
+        sigma1_prev: float,
+        mu2_prev: float,
+        sigma2_prev: float,
+    ) -> float:
+        term_a = np.log(self.cfg.s)
+        term_a *= -0.5
+
+        term_b = (self.sig1 + ((observation - self.mu1) ** 2)) / self.cfg.s
+        term_b *= -0.5
+
+        term_c = np.log(sigma1_prev + np.exp(self.mu2))
+        term_c *= -0.5
+
+        term_d = (self.sig1 + (self.mu1 - mu1_prev) ** 2) / (sigma1_prev + np.exp(self.mu2))
+        term_d *= -0.5
+
+        term_e = np.log(sigma2_prev + self.cfg.eta)
+        term_e *= -0.5
+
+        term_f = (self.sig2 + (self.mu2 - mu2_prev) ** 2) / (sigma2_prev + self.cfg.eta)
+        term_f *= -0.5
+
+        term_g = np.log(2 * np.pi)
+        term_g *= -0.5
+
+        term_h = 1
+
+        term_i = np.log(self.sig1) * self.sig2
+        term_i *= 0.5
+
+        free_energy = term_a + term_b + term_c + term_d + term_e + term_f + term_g + term_h + term_i
+
+        return free_energy
+
+    def calc_variational_free_energy_2(
+        self,
+        observation: float,
+        mu1_prev: float,
+        sigma1_prev: float,
+        mu2_prev: float,
+        sigma2_prev: float,
+    ) -> float:
+        """
+        Calculate variational free energy for the current state.
+
+        LLM interpretation of calc_variational_free_energy to be more readable.
+
+        VFE = -0.5 * [
+            log(s) + (sig1 + (o - mu1)^2) / s +
+            log(sig1_prev + exp(mu2)) + (sig1 + (mu1 - mu1_prev)^2) / (sig1_prev + exp(mu2)) +
+            log(sig2_prev + eta) + (sig2 + (mu2 - mu2_prev)^2) / (sig2_prev + eta) +
+            log(2π)
+        ] + 1 + 0.5 * log(sig1) * sig2
+        """
+        # Observation likelihood term
+        obs_log_var = np.log(self.cfg.s)
+        obs_precision = (self.sig1 + (observation - self.mu1) ** 2) / self.cfg.s
+
+        # Level 1 prior term
+        omega = np.exp(self.mu2)
+        l1_var = sigma1_prev + omega
+        l1_log_var = np.log(l1_var)
+        l1_precision = (self.sig1 + (self.mu1 - mu1_prev) ** 2) / l1_var
+
+        # Level 2 prior term
+        l2_var = sigma2_prev + self.cfg.eta
+        l2_log_var = np.log(l2_var)
+        l2_precision = (self.sig2 + (self.mu2 - mu2_prev) ** 2) / l2_var
+
+        # Constant term
+        log_2pi = np.log(2 * np.pi)
+
+        # Entropy term
+        entropy = 0.5 * np.log(self.sig1) * self.sig2
+
+        # Combine all terms
+        free_energy = (
+            -0.5
+            * (
+                obs_log_var
+                + obs_precision
+                + l1_log_var
+                + l1_precision
+                + l2_log_var
+                + l2_precision
+                + log_2pi
+            )
+            + 1
+            + entropy
+        )
+
+        return free_energy
 
     # ---------- Plotting (adapted from plot_results in hgf/hgf3.py) ----------
     def plot_results(
@@ -203,8 +313,7 @@ class HGFPaper2Gaussian(Model):
         # 1) Observations vs inferred state (mu1)
         ax = axes[0]
         ax.plot(trials, self.history["o"].values, label="o (observation)", linewidth=1)
-        ax.plot(trials, self.history["mu1_hat"].values, label="mu1_hat (prediction)", linewidth=2)
-        ax.plot(trials, self.history["mu1"].values, label="mu1 (posterior)", linewidth=2)
+        ax.plot(trials, self.history["mu1"].values, label="mu1 (prediction)", linewidth=2)
 
         if true_x1 is not None:
             ax.plot(trials, list(true_x1), label="true x1", linewidth=1)
@@ -223,7 +332,7 @@ class HGFPaper2Gaussian(Model):
         ax.legend()
         ax.grid(True, alpha=0.3)
 
-        # 3) Volatility belief (mu2) + omega = exp(mu2_hat)
+        # 3) Volatility belief (mu2) + omega = exp(mu2_prev)
         ax = axes[2]
         mu2 = self.history["mu2"].values
         sig2 = np.maximum(self.history["sig2"].values, 0.0)

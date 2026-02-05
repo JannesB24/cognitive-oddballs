@@ -25,6 +25,10 @@ Evaluation Metrics:
     we use RMSE and Variational Free Energy (VFE) as evaluation metrics.
 """
 
+
+# QUESTIONS:
+# Is the Faulcault stuff still relevant?
+
 from collections.abc import Callable
 from pathlib import Path
 
@@ -54,30 +58,14 @@ def set_seed(seed: int = 42):
 
 
 # Evaluation metrics
-def rmse(predictions: np.ndarray, targets: np.ndarray) -> float:
+def rmse(predictions: np.ndarray, beliefs: np.ndarray) -> float:
     """Root Mean Square Error (RMSE) between predictions and targets."""
-    return np.sqrt(np.mean((predictions - targets) ** 2))
+    return np.sqrt(np.mean((predictions - beliefs) ** 2))
 
 
 def log_likelihood(predictions: np.ndarray, targets: np.ndarray, noise_std: float) -> float:
     residuals = targets - predictions
     return -0.5 * np.sum((residuals / noise_std) ** 2 + np.log(2 * np.pi * noise_std**2))
-
-
-def compute_apparent_learning_rate(updates, prediction_errors):
-    """
-    Apparent learning rate (Nassar et al., Foucault et al.)
-
-    alpha_t = update_t / prediction_error_t
-    """
-    updates = np.asarray(updates)
-    pes = np.asarray(prediction_errors)
-
-    lr = np.full_like(updates, np.nan, dtype=float)
-    valid = pes != 0
-    lr[valid] = updates[valid] / pes[valid]
-
-    return lr
 
 
 # Response Model
@@ -99,20 +87,6 @@ class GaussianResponseModel:
     #     )
 
 
-def evaluate_outputs(outputs: dict) -> dict:
-    """
-    Compute model-agnostic metrics.
-    """
-    lr = compute_apparent_learning_rate(outputs["updates"], outputs["prediction_errors"])
-
-    return {
-        "learning_rate": lr,
-        "mean_learning_rate": np.nanmean(lr),
-        "prediction_errors": np.asarray(outputs["prediction_errors"]),
-        "updates": np.asarray(outputs["updates"]),
-    }
-
-
 # Core simulation loop
 def run_model_on_environment(
     model: Model, response_model: GaussianResponseModel, environments: pd.DataFrame
@@ -125,8 +99,6 @@ def run_model_on_environment(
 
     response_model = GaussianResponseModel(0.1)
     output["responses"] = output["beliefs"].apply(lambda response: response_model.sample(response))
-
-    # TODO: Add log likelihoods if needed
 
     return output
 
@@ -164,8 +136,12 @@ def run_experiment(
             response_model = GaussianResponseModel(response_noise_std)
             outputs = run_model_on_environment(model, response_model, environment)
 
-            lr = compute_apparent_learning_rate(outputs["updates"], outputs["prediction_errors"])
+            # Calculate RMSE: How well does the model's mechanism update the belief for timestep t
+            # seeing observation at timestep t
+            total_rmse = rmse(outputs["beliefs"].to_numpy()[1:], environment["x"].to_numpy())
 
+            total_surprise = np.sum(outputs["variational_free_energy"]) * -1
+            test = 0
             # Store the results for this simulation
             # all_learning_rates[sim] = lr
             # all_prediction_errors[sim] = outputs["prediction_errors"]
@@ -197,10 +173,8 @@ def experiment_changepoint():
         "CPM": ChangePointModelVariational(
             mu0=250, sigma0=50, obs_noise_std=25, w1_std=0.1, w2_std=30, h=0.1
         ),
-        "gHGF": WeberModel(node4=True, node_4_type="volatility_parent", n4_p=3.0),
-        "HGF": HGFPaper2Gaussian(
-            eta=0.005, s=15.0**2, mu1_init=0.0, sig1_init=10.0, mu2_init=-4.0, sig2_init=1.0
-        ),
+        "HGF": HGFPaper2Gaussian(eta=0.005, s=15.0**2, mu1_init=250.0),
+        # "gHGF": WeberModel(node4=True, node_4_type="volatility_parent", n4_p=3.0),
     }
 
     return run_experiment(
