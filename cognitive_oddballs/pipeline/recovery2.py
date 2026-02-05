@@ -162,15 +162,7 @@ def response_log_likelihood(responses, beliefs, sigma_r):
     if np.any(sigma_r <= 0):
         return -np.inf
 
-    responses = np.asarray(responses)
-    beliefs = np.asarray(beliefs)
-    sigma_r = np.asarray(sigma_r)
-
-    if np.any(sigma_r <= 0):
-        return -np.inf
-
     residuals = responses - beliefs
-    var = sigma_r**2
     var = sigma_r**2
 
     return -0.5 * np.sum((residuals**2) / var + np.log(2 * np.pi * var))
@@ -463,9 +455,7 @@ def modelrec_changepoint():
 
 def modelrec_randomwalk():
     models = {"CPM": ChangePointModelVariational}
-    models = {"CPM": ChangePointModelVariational}
 
-    true_params = {"CPM": np.array([0.01, 1000.0, 0.1])}
     true_params = {"CPM": np.array([0.01, 1000.0, 0.1])}
 
     w1_grid = np.linspace(0.05, 0.5, 6)
