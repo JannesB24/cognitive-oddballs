@@ -9,13 +9,15 @@ Based on Marković & Kiebel (2016)
 from collections.abc import Callable
 
 import numpy as np
-import warnings
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
 
 from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
 from cognitive_oddballs.models.change_point_model_variational import ChangePointModelVariational
 from cognitive_oddballs.models.hgf.hgf2_gaussian import HGFPaper2Gaussian, HGF2Config, exp_clip
-import pandas as pd
+
 
 # TODO: What’s left to do for real model recovery
 
@@ -713,6 +715,9 @@ def true_param_sampler(model_name: str):
     raise KeyError(model_name)
 
 
+# In recovery2.py
+# REPLACE the entire function with this one:
+
 def run_many_simulations(
     n_sims,
     models,
@@ -727,13 +732,14 @@ def run_many_simulations(
     set_seed(seed)
 
     model_names = list(models.keys())
-    winners = {tm: dict.fromkeys(model_names, 0) for tm in model_names}
-    param_recovery = {m: [] for m in model_names}
+    
+    simulation_results = []
 
     for sim in range(n_sims):
+        print(f"Running simulation {sim + 1}/{n_sims}...")
         true_params = {m: true_param_sampler(m) for m in model_names}
 
-        results = model_recovery_per_env(
+        results_per_env = model_recovery_per_env(
             models=models,
             true_params=true_params,
             param_grids=param_grids,
@@ -746,26 +752,36 @@ def run_many_simulations(
             scores = {}
             for fit_m in model_names:
                 if decision_rule == "BIC":
-                    scores[fit_m] = results[true_m][fit_m]["MLE"]["BIC"]
-                else:
-                    scores[fit_m] = results[true_m][fit_m]["Bayesian"]["log_evidence"]
+                    scores[fit_m] = results_per_env[true_m][fit_m]["MLE"]["BIC"]
+                else:  # 'LogEvidence'
+                    scores[fit_m] = results_per_env[true_m][fit_m]["Bayesian"]["log_evidence"]
 
             winner = (
                 min(scores, key=scores.get)
                 if decision_rule == "BIC"
                 else max(scores, key=scores.get)
             )
-            winners[true_m][winner] += 1
 
-            if winner == true_m:
-                recovered = (
-                    results[true_m][true_m]["MLE"]["best_params"]
+            if winner in results_per_env[true_m]:
+                recovered_params = (
+                    results_per_env[true_m][winner]["MLE"]["best_params"]
                     if decision_rule == "BIC"
-                    else results[true_m][true_m]["Bayesian"]["MAP"]
+                    else results_per_env[true_m][winner]["Bayesian"]["MAP"]
                 )
-                param_recovery[true_m].append((true_params[true_m], recovered))
+            else:
+                recovered_params = None
 
-    return winners, param_recovery
+            simulation_results.append({
+                "sim_id": sim,
+                "true_model": true_m,
+                "winner": winner,
+                "true_params": true_params[true_m],
+                "recovered_params": recovered_params,
+                "scores": scores,
+            })
+            
+   
+    return simulation_results
 
 
 def print_confusion_matrix(winners):
@@ -796,7 +812,124 @@ def print_param_recovery_stats(param_recovery):
             r = np.corrcoef(true_p[:, i], rec_p[:, i])[0, 1]
             print(f"  param {i}: corr(true, recovered) = {r: .2f}")
 
+def plot_confusion_matrix(simulation_results, model_names):
+    """
+    Creates a graphical confusion matrix from simulation results.
+    Rows = True Model, Columns = Recovered Model.
+    """
+    n_models = len(model_names)
+    conf_matrix = pd.DataFrame(np.zeros((n_models, n_models)), index=model_names, columns=model_names)
 
+    for result in simulation_results:
+        true_model = result["true_model"]
+        winner = result["winner"]
+        conf_matrix.loc[true_model, winner] += 1
+        
+    # Convert counts to proportions
+    conf_matrix_prop = conf_matrix.div(conf_matrix.sum(axis=1), axis=0)
+
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(
+        conf_matrix_prop,
+        annot=True,
+        fmt=".2f",
+        cmap="Blues",
+        linewidths=.5,
+        cbar=True,
+    )
+    plt.title("Model Recovery Confusion Matrix (Proportions)", fontsize=16)
+    plt.xlabel("Recovered Model", fontsize=12)
+    plt.ylabel("True Model", fontsize=12)
+    plt.show()
+
+def plot_parameter_recovery(simulation_results, param_names_dict):
+    """
+    Creates scatter plots for true vs. recovered parameters for correctly
+    identified models.
+    
+    param_names_dict: e.g., {"CPM": ["w1", "w2", "h"], "HGF": ["eta", "s"]}
+    """
+    correct_fits = [res for res in simulation_results if res["true_model"] == res["winner"]]
+    
+    if not correct_fits:
+        print("No simulations resulted in correct model recovery. Skipping parameter recovery plots.")
+        return
+
+    df = pd.DataFrame(correct_fits)
+
+    for model_name, param_names in param_names_dict.items():
+        model_df = df[df["true_model"] == model_name]
+        if model_df.empty:
+            continue
+
+        n_params = len(param_names)
+        fig, axes = plt.subplots(1, n_params, figsize=(5 * n_params, 5), squeeze=False)
+        fig.suptitle(f"Parameter Recovery for {model_name} (n={len(model_df)})", fontsize=16)
+
+        true_params = np.vstack(model_df["true_params"].values)
+        rec_params = np.vstack(model_df["recovered_params"].values)
+
+        for i, param_name in enumerate(param_names):
+            ax = axes[0, i]
+            x = true_params[:, i]
+            y = rec_params[:, i]
+            
+            ax.scatter(x, y, alpha=0.6, edgecolors='k')
+            
+            # Add identity line
+            lim_min = min(ax.get_xlim()[0], ax.get_ylim()[0])
+            lim_max = max(ax.get_xlim()[1], ax.get_ylim()[1])
+            ax.plot([lim_min, lim_max], [lim_min, lim_max], 'r--', label="Identity")
+            
+            ax.set_xlabel(f"True {param_name}", fontsize=12)
+            ax.set_ylabel(f"Estimated {param_name}", fontsize=12)
+            
+            # Calculate and display correlation
+            corr = np.corrcoef(x, y)[0, 1]
+            ax.set_title(f"{param_name} (r = {corr:.2f})", fontsize=14)
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        plt.show()
+
+def plot_score_differences(simulation_results, model_names, decision_rule="BIC"):
+    """
+    Plots the distribution of the difference in model selection scores.
+    For BIC, shows BIC(CPM) - BIC(HGF). Negative values favor CPM.
+    For LogEvidence, shows LogEv(CPM) - LogEv(HGF). Positive values favor CPM.
+    """
+    if len(model_names) != 2:
+        print("Score difference plot is only supported for two models.")
+        return
+        
+    m1, m2 = model_names[0], model_names[1]
+    
+    plot_data = []
+    for res in simulation_results:
+        score_diff = res["scores"][m1] - res["scores"][m2]
+        plot_data.append({"true_model": res["true_model"], "score_diff": score_diff})
+        
+    df = pd.DataFrame(plot_data)
+
+    plt.figure(figsize=(8, 6))
+    sns.violinplot(data=df, x="true_model", y="score_diff", inner="quartile", cut=0)
+    
+    # Add a decision boundary line
+    plt.axhline(0, color='r', linestyle='--', label="Decision Boundary")
+    
+    ylabel = f"{m1} vs {m2} Score Difference"
+    if decision_rule == "BIC":
+        title = f"BIC Difference ({m1} - {m2}) | Negative favors {m1}"
+    else: # LogEvidence
+        title = f"Log Evidence Difference ({m1} - {m2}) | Positive favors {m1}"
+        
+    plt.title(title, fontsize=16)
+    plt.xlabel("True Generative Model", fontsize=12)
+    plt.ylabel(ylabel, fontsize=12)
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.show()
 # ============================================================
 # MAIN
 # ============================================================
@@ -809,6 +942,11 @@ if __name__ == "__main__":
         "HGF": PatchedHGF,
     }
 
+    # Define parameter names for plotting labels
+    param_names_dict = {
+        "CPM": ["w1_std", "w2_std", "h"],
+        "HGF": ["eta", "s"]
+    }
     # ----- parameter grids -----
     w1_grid = np.linspace(0.05, 0.5, 6)
     w2_grid = np.array([50.0, 200.0, 1000.0])
@@ -824,18 +962,27 @@ if __name__ == "__main__":
         "HGF": hgf_grid,
     }
 
-    winners, param_recovery = run_many_simulations(
-        n_sims=5,
+
+    simulation_results = run_many_simulations(
+        n_sims=5,  
         models=models,
         true_param_sampler=true_param_sampler,
         param_grids=param_grids,
         environment_fn=generate_change_point_environment,
         n_trials=200,
         sigma_r=5.0,
-        decision_rule="BIC",  # robust choice
+        decision_rule="BIC",
     )
 
-    print_confusion_matrix(winners)
-    print_param_recovery_stats(param_recovery)
+    model_names = list(models.keys())
+    
+    # 1. Plot confusion matrix
+    plot_confusion_matrix(simulation_results, model_names)
+    
+    # 2. Plot parameter recovery
+    plot_parameter_recovery(simulation_results, param_names_dict)
+    
+    # 3. Plot score differences
+    plot_score_differences(simulation_results, model_names, decision_rule="BIC")
 
-    print("\nModel recovery finished.")
+    print("\nModel recovery and plotting finished.")
