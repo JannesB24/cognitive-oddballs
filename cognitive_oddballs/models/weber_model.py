@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 from pyhgf.model import Network
 
+from cognitive_oddballs.models.model import Model
+
 from pyhgf.response import total_gaussian_surprise
 
 from cognitive_oddballs.models.model import Model

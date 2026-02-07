@@ -31,7 +31,6 @@ from cognitive_oddballs.models.model import Model
 logger = logging.getLogger(__name__)
 
 class ChangePointModelVariational(Model):
-class ChangePointModelVariational(Model):
     """
     Change Point Model using Variational Bayesian Inference.
 
@@ -45,17 +44,23 @@ class ChangePointModelVariational(Model):
     Parameters
     ----------
     mu0 : float
-        Initial belief about hidden state (μ₀¹)
+        Initial belief about hidden state POSITION (μ₀¹)
+        0 <= mu0 <= 500 (ideally the centre as the starting position)
     sigma0 : float
         Initial uncertainty (σ₀¹)
+        0 < sigma0 <= 100
     obs_noise : float
         Observation noise STANDARD DEVIATION (s)
-    w1 : float
-        Diffusion rate during stability periods (w₁)
-        Typical value: 0.01 (small drift)
+        obs_noise > 0  (matched to the environment noise)
+    w1_std : float
+        Stability drift STANDARD DEVIATION (√w₁)
+        0 ≤ w1_std ≤ 10 for typical continuous drift.
+        For change-point environments: 0 or very small (ie. 0.1) for minimal drift.
+        Note: Squared internally to get variance w₁
     w2 : float
-        Change-point VARIANCE (w₂)
-        Typical value: 100-1000 (large jumps)
+        Change-point jump STANDARD DEVIATION (√w₂)
+        130 <= w2 <= 125000 for an environment with an observation range of 0-500.
+        Note: Squared internally to get variance w₂
     h : float
         Hazard rate - prior probability of change-point (h)
         Typical value: 0.1 (10% chance per trial)
@@ -85,7 +90,7 @@ class ChangePointModelVariational(Model):
     ...     sigma0=10,
     ...     obs_noise=10,
     ...     w1=0.01,
-    ...     w2=100,
+    ...     w2=900,
     ...     h=0.1
     ... )
     >>> results = model.run()
@@ -93,39 +98,49 @@ class ChangePointModelVariational(Model):
     """
     def __init__(
             self, 
-            mu0 = 0.0, # just needed to put any default parameters here for eval to work. they'll be overwritten anyway - R.
-            sigma0 = 25.0, 
-            obs_noise = 25.0, 
-            w1 = 0.01, 
-            w2 = 100.0, 
-            h = 0.1, 
-            add_second_level=True
-        ):
+            mu0: float = 0.0, # just needed to put any default parameters here for eval to work. they'll be overwritten anyway - R.
+            sigma0: float = 25.0, 
+            # TODO: check names different
+            obs_noise: float = 25.0, # TODO: check that this is std dev and not variance, and that it's properly used in the code (squared when needed) - R.
+            w1_std: float = 0.01, # TODO: check that this is std dev and not variance, and that it's properly used in the code (squared when needed) - R.
+            w2_std: float = 100.0,  # TODO: check that this is std dev and not variance, and that it's properly used in the code (squared when needed) - R.
+            h: float = 0.1, 
+            add_second_level: bool =True
+        ) -> None:
         # ===== Perceptual free parameters =====
         self.mu0 = mu0  # μ₀¹ - Initial belief
         self.sigma0 = sigma0  # σ₀¹ - Initial uncertainty
-        self.obs_noise = obs_noise  # s - Observation noise
-        self.w1 = w1  # w₁ - Stability diffusion
-        self.w2 = w2  # w₂ - Change-point variance
+        self.obs_noise = obs_noise_std  # s - Observation noise (std dev)
         self.hazard_rate = h  # h - Hazard rate
 
-        # ===== First-level latent states =====
+        # STORE STANDARD DEVITAION VALUES
+        self.obs_noise_std = obs_noise_std  # s - Observation noise (std dev)
+        self.w1_std = w1_std  # w₁ - Stability diffusion (std dev)
+        self.w2_std = w2_std  # w₂ - Change-point variance (std dev)
+
+        # VARIANCE CONVERSION FOR INTERNAL USE
+        self.obs_noise_var = obs_noise_std**2
+        self.w1_var = w1_std**2
+        self.w2_var = w2_std**2
+
+        # First-level latent states
         self.mu = mu0  # μ^(1) - Posterior expectation
         self.sigma = sigma0  # σ^(1) - Posterior STANDARD DEVIATION
 
-        # ===== Second-level states (for HGF comparability) =====
+        # Second-level states (for HGF comparability)
         self.add_second_level = add_second_level
         if add_second_level:
             self.mu2 = 0.0  # μ^(2) - Volatility (log-odds of Ω)
             self.sigma2 = 1.0  # σ^(2) - Second-level uncertainty
 
-        # ===== History tracking =====
+        # History tracking
         columns = [
             "beliefs",  # μ^(1)
             "prediction_errors",  # δ_t
             "learning_rates",  # α^(1)
             "uncertainties",  # σ^(1)
             "change_point_probs",  # Ω_t
+            "variational_free_energy",  # Variational free energy
         ]
 
         if add_second_level:
@@ -224,17 +239,23 @@ class ChangePointModelVariational(Model):
         """
         # Likelihood under stability (no change-point)
         # x_t follows x_{t-1} with small drift w1
-        var_stability = self.sigma**2 + self.w1 + self.obs_noise**2
+        var_stability = self.sigma**2 + self.w1_var + self.obs_noise_var
         like_stability = stats.norm.pdf(delta, loc=0.0, scale=np.sqrt(var_stability))
+        #var_stability = self.sigma**2 + self.w1 + self.obs_noise**2
+        #like_stability = stats.norm.pdf(delta, loc=0.0, scale=np.sqrt(var_stability))
 
         # Likelihood under change-point
         # x_t is drawn from a wide distribution (large w2)
-        var_change = self.obs_noise**2 + self.w2
+        var_change = self.obs_noise_var + self.w2_var
+        # TODO: var_change = self.obs_noise**2 + self.w2
         like_change = stats.norm.pdf(delta, loc=0.0, scale=np.sqrt(var_change))
 
         # Bayes rule with hazard rate as prior
         numerator = self.hazard_rate * like_change
         denominator = numerator + (1 - self.hazard_rate) * like_stability
+
+        # NaN PREVENTION (in case of zero division)
+        denominator = np.maximum(denominator, 1e-10)
 
         omega = numerator / denominator
         return np.clip(omega, 1e-6, 1 - 1e-6)
@@ -261,23 +282,28 @@ class ChangePointModelVariational(Model):
         t : int
             Trial index
         """
+        mu1_prev = self.mu
+        sigma1_prev = self.sigma
+
         # 1. Prediction error
-        delta = observation - self.mu
+        delta = observation - mu1_prev
 
         # 2. Change-point probability (Bayes rule)
         omega = self._change_point_probability(delta)
 
         # 3. Update posterior uncertainty (inverse variance form)
         # This is the key equation that links change-points to learning
-        inv_sigma_squared = (1 - omega) / (self.sigma**2 + self.w1) + 1 / self.obs_noise**2
+        inv_sigma_squared = (1 - omega) / (sigma1_prev**2 + self.w1_var) + 1 / self.obs_noise_var
+        # NaN PREVENTION (in case of zero division)
+        inv_sigma_squared = np.maximum(inv_sigma_squared, 1e-10)
         sigma_new = 1 / np.sqrt(inv_sigma_squared)
 
         # 4. Learning rate (ratio of posterior to observation uncertainty)
-        alpha = sigma_new / self.obs_noise
+        alpha = sigma_new / self.obs_noise_std
         alpha = np.clip(alpha, 0.0, 1.0)  # Ensure valid range
 
         # 5. Update posterior expectation (delta rule)
-        mu_new = self.mu + alpha * delta
+        mu_new = mu1_prev + alpha * delta
         mu_new = np.clip(mu_new, 0, 500)  # Clip to valid screen range
 
         # 6. Second-level update (if enabled)
@@ -309,8 +335,10 @@ class ChangePointModelVariational(Model):
         self.mu = mu_new
         self.sigma = sigma_new
 
+        free_energy = self.calc_variational_free_energy(observation, mu1_prev, sigma1_prev)
+
         # 8. Store history
-        self._store_history(delta, omega, alpha, epsilon2, alpha2)
+        self._store_history(delta, omega, alpha, epsilon2, alpha2, free_energy)
 
     def _store_history(
         self,
@@ -319,6 +347,7 @@ class ChangePointModelVariational(Model):
         alpha: float,
         epsilon2: float = 0.0,
         alpha2: float = 0.0,
+        free_energy: float = 0.0,
     ) -> None:
         """Store trial results in history."""
         row_data = {
@@ -327,6 +356,7 @@ class ChangePointModelVariational(Model):
             "learning_rates": alpha,
             "uncertainties": self.sigma,
             "change_point_probs": omega,
+            "variational_free_energy": free_energy,
         }
 
         if self.add_second_level:
@@ -339,6 +369,37 @@ class ChangePointModelVariational(Model):
             )
 
         self.history = pd.concat([self.history, pd.DataFrame([row_data])], ignore_index=True)
+
+    def calc_variational_free_energy(
+        self, observation: float, mu1_prev: float, sigma1_prev: float
+    ) -> float:
+        """
+        Calculate variational free energy for the current state.
+
+        Returns
+        -------
+        float
+            Variational free energy
+        """
+        stability_normal = stats.norm.pdf(
+            x=observation,
+            loc=mu1_prev,
+            scale=np.sqrt(sigma1_prev**2 + self.w1_var + self.obs_noise_var),
+        )
+
+        stability_normal *= 1 - self.hazard_rate
+
+        change_normal = stats.norm.pdf(
+            observation, loc=0.0, scale=np.sqrt(self.obs_noise_var + self.w2_var)
+        )
+
+        change_normal *= self.hazard_rate
+
+        likelihood = stability_normal + change_normal
+        likelihood = np.maximum(likelihood, 1e-10)  # Prevent log(0)
+        free_energy = np.log(likelihood)
+
+        return free_energy
 
     # -------------------- Interface Methods --------------------------
 
@@ -367,6 +428,7 @@ class ChangePointModelVariational(Model):
             - Mu2: Second-level belief (μ^(2))
             - Epsilon2: Second-level prediction error (ε^(2))
             - Alpha2: Second-level learning rate (α^(2))
+            - FreeEnergy: Variational free energy
         """
         if self.add_second_level:
             self.mu2 = 0.0
@@ -379,21 +441,12 @@ class ChangePointModelVariational(Model):
             "learning_rates": 0.0,
             "uncertainties": self.sigma,
             "change_point_probs": 0.0,
-        initial_data = {
-            "beliefs": self.mu,
-            "prediction_errors": 0.0,
-            "learning_rates": 0.0,
-            "uncertainties": self.sigma,
-            "change_point_probs": 0.0,
+            "variational_free_energy": 0.0,
         }
 
         if self.add_second_level:
-            initial_data.update(
-            initial_data.update(
+            initial_data.update( # does that need to be self.history?
                 {
-                    "mu2": self.mu2,
-                    "epsilon2": 0.0,
-                    "alpha2": 0.0,
                     "mu2": self.mu2,
                     "epsilon2": 0.0,
                     "alpha2": 0.0,
@@ -402,25 +455,22 @@ class ChangePointModelVariational(Model):
 
         self.history = pd.DataFrame([initial_data])
 
-        self.history = pd.DataFrame([initial_data])
-
-        # Run updates for trials 1 to T-1
-        for t in range(1, len(observations)):
+        # Run updates for trials 0 to T-1
+        for t in range(0, len(observations)):
             self.update(observations[t])
 
         output_columns = [
-            # "Beliefs",
-            # "Prediction Errors",
-            # "Updates",
-            # "Log Likelihoods",
+            "beliefs",
+            "prediction_errors",
+            "learning_rates",
+            "variational_free_energy",
         ]
 
-        output = self.history[["beliefs"]]
+        output = self.history[output_columns].copy()
 
-        rename_dict = {"beliefs": "raw_responses"}
+        output["updates"] = self.history["beliefs"].diff().shift(-1)
 
-
-        return output.rename(columns=rename_dict)
+        return output
     
     # TODO: LLM-generated -- verify correctness
     def set_parameters_cma(self, theta: np.ndarray) -> None:
@@ -666,15 +716,14 @@ if __name__ == "__main__":
     # Initialize CPM model with change-point environment
     cpm_model_change = ChangePointModelVariational(
         x=df_change_point["x"].values,
-        mu0=df_change_point["x"].iloc[0],  # Start at first observation
-        sigma0=25,  # Match environment noise
-        obs_noise=25,  # Match sigma
-        w1=0.01,  # Small stability drift
-        w2=1000,  # Large change-point variance
-        h=0.1,  # Match environment hazard rate
+        mu0=df_change_point["x"].iloc[0],
+        sigma0=25,
+        obs_noise_std=25,
+        w1_std=0.1,  # std dev (squares to 0.01 in variance)
+        w2_std=30,  # std dev (squares to 900 in variance)
+        h=0.1,
         add_second_level=True,
     )
-
     # Run model
     results_change = cpm_model_change.run(mu_true=df_change_point["mu"].values)
 
@@ -713,9 +762,9 @@ if __name__ == "__main__":
     cpm_model_walk = ChangePointModelVariational(
         mu0=df_random_walk["x"].iloc[0],
         sigma0=25,
-        obs_noise=25,
-        w1=10,  # Higher drift for random walk
-        w2=1000,
+        obs_noise_std=25,
+        w1_std=3.16,  # std dev (squares to 10 drift steps in variance)
+        w2_std=30,  # (of no significance in random walk environment) std dev (squared to 900 in variance)
         h=0.1,
         add_second_level=True,
     )

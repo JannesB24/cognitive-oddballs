@@ -8,7 +8,6 @@ class Model(ABC):
 
     @abstractmethod
     def run(self, observations: np.ndarray) -> pd.DataFrame:
-    def run(self, observations: np.ndarray) -> pd.DataFrame:
         """
         Run the model on each observation in sequence.
 
@@ -17,6 +16,10 @@ class Model(ABC):
 
         Returns:
             pd.DataFrame: Relevant model outputs as a pandas DataFrame.
+
+            The first line corresponds to the initial belief before seeing any observation,
+            therefore the entry at index 1 in "beliefs" corresponds to the belief after seeing
+            the first observation.
         """
         pass
 
@@ -40,7 +43,7 @@ class Model(ABC):
           - compute and return a scalar loss (NLL, VFE, etc.)
 
         Args:
-            observations (np.ndarray): Input observations.
+            observations (np.ndarray): Input observations for the model.
 
         Returns:
             float: Scalar objective to minimize.

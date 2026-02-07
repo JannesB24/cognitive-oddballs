@@ -17,7 +17,7 @@ def exp_clip(x: Number, clip: float = 60.0) -> float:
     return float(np.exp(np.clip(float(x), -clip, clip)))
 
 
-def sigmoid_stable(x: Number) -> float:
+def sigmoid_stable(x: Number) -> float: # TODO: check if needed, del if not
     """Numerically stable sigmoid."""
     x = float(x)
     if x >= 0:
@@ -46,6 +46,17 @@ class HGF2Config:
     # Numerical stability
     min_var: float = 1e-8
     exp_clip_value: float = 30.0
+
+    def __post_init__(self):
+        """Validate parameters after initialization."""
+        if self.eta <= 0:
+            raise ValueError("eta must be > 0")
+        if self.s <= 0:
+            raise ValueError("s (observation variance) must be > 0")
+        if self.sig1_0 < self.min_var:
+            raise ValueError(f"sig1_0 must be >= {self.min_var}")
+        if self.sig2_0 < self.min_var:
+            raise ValueError(f"sig2_0 must be >= {self.min_var}")
 
 
 class HGFPaper2Gaussian(Model):
@@ -79,35 +90,32 @@ class HGFPaper2Gaussian(Model):
             exp_clip_value=float(exp_clip_value),
         )
 
-        if self.cfg.eta <= 0:
-            raise ValueError("eta must be > 0")
-        if self.cfg.s <= 0:
-            raise ValueError("s (observation variance) must > 0")
-
         # current posteriors
         self.mu1 = self.cfg.mu1_0
-        self.sig1 = max(self.cfg.sig1_0, self.cfg.min_var)
+        self.sig1 = self.cfg.sig1_0
+        # self.sig1 = max(self.cfg.sig1_0, self.cfg.min_var)
         self.mu2 = self.cfg.mu2_0
-        self.sig2 = max(self.cfg.sig2_0, self.cfg.min_var)
+        self.sig2 = self.cfg.sig2_0
+        #self.sig2 = max(self.cfg.sig2_0, self.cfg.min_var)
 
         # trial counter
         self.trial = 0
 
         self.history: dict[str, list[float]] = {
-            "F_t": [],
+            "vfe": [], # variational free energy: calculated after update # TODO: was F_t before
             "o": [],
             "mu1_hat": [],
             "sig1_hat": [],
-            "mu1": [],
-            "sig1": [],
+            "mu1": [], # posterior mean level 1 after update -> belief about x1_t
+            "sig1": [], # posterior variance level 1 after update -> uncertainty about x1_t
             "mu2_hat": [],
             "sig2_hat": [],
-            "mu2": [],
-            "sig2": [],
+            "mu2": [], # posterior mean level 2 after update -> belief about x2_t
+            "sig2": [], # posterior variance level 2 after update -> uncertainty about x2_t
             "omega": [],  # exp(mu2_hat)
-            "delta1": [],
-            "alpha1": [],
-            "delta2": [],
+            "delta1": [], # prediction error level 1
+            "alpha1": [], # learning rate level 1
+            "delta2": [], # prediction error level 2
             "k": [],
             "r": [],
         }
@@ -118,11 +126,11 @@ class HGFPaper2Gaussian(Model):
 
         # ----------- Prediction -----------------
         # Level 2
-        mu2_hat = self.mu2
-        sig2_hat = max(self.sig2 + self.cfg.eta, minvar)
+        mu2_prev = self.mu2
+        sig2_prev = max(self.sig2 + self.cfg.eta, minvar)
         # Level 1
-        # omega = exp(mu2_hat)
-        omega = exp_clip(mu2_hat, self.cfg.exp_clip_value)
+        # omega = exp(mu2_prev)
+        omega = exp_clip(mu2_prev, self.cfg.exp_clip_value)
 
         mu1_prev = self.mu1
         sig1_prev = self.sig1
@@ -153,11 +161,11 @@ class HGFPaper2Gaussian(Model):
         r = (omega - sig1_prev) / den1
 
         # precision
-        pi2 = (1.0 / sig2_hat) + 0.5 * k * (k + r * delta2)
+        pi2 = (1.0 / sig2_prev) + 0.5 * k * (k + r * delta2)
 
         # posterior update
         sig2_new = 1.0 / max(pi2, minvar)
-        mu2_new = mu2_hat + 0.5 * max(sig2_new, minvar) * k * delta2
+        mu2_new = mu2_prev + 0.5 * max(sig2_new, minvar) * k * delta2
 
         # state update of the model
         self.mu1, self.mu2 = mu1_new, mu2_new
@@ -181,42 +189,7 @@ class HGFPaper2Gaussian(Model):
         term9 = 0.5 * np.log(max(sig2_new, minvar))
 
         vfe = term1 + term2 + term3 + term4 + term5 + term6 + term7 + term8 + term9
-        self.history["F_t"].append(float(vfe))
-
-        # Log
-        self.history["o"].append(o)
-        self.history["mu1_hat"].append(mu1_prev)
-        self.history["sig1_hat"].append(den1)
-        self.history["mu1"].append(self.mu1)
-        self.history["sig1"].append(self.sig1)
-        self.history["mu2_hat"].append(mu2_hat)
-        self.history["sig2_hat"].append(sig2_hat)
-        self.history["mu2"].append(self.mu2)
-        self.history["sig2"].append(self.sig2)
-        self.history["omega"].append(omega)
-        self.history["delta1"].append(delta1)
-        self.history["alpha1"].append(alpha1)
-        self.history["delta2"].append(delta2)
-
-        # ------------ Free energy (eq. 29) ---------------
-        # TODO: LLM-generated -- verify correctness
-        s = self.cfg.s
-
-        den1 = max(sig1_prev + omega, minvar)
-        den2 = max(sig2_prev + self.cfg.eta, minvar)
-
-        term1 = -0.5 * np.log(s)
-        term2 = -0.5 * den1 / s
-        term3 = -0.5 * np.log(den1)
-        term4 = 0.5 * (sig1_new + (mu1_new - mu1_prev) ** 2) / den1
-        term5 = 0.5 * np.log(den2)
-        term6 = 0.5 * (sig2_new + (mu2_new - mu2_prev) ** 2) / den2
-        term7 = -0.5 * np.log(2.0 * np.pi)
-        term8 = 0.5 * np.log(max(sig1_new, minvar))
-        term9 = 0.5 * np.log(max(sig2_new, minvar))
-
-        vfe = term1 + term2 + term3 + term4 + term5 + term6 + term7 + term8 + term9
-        self.history["F_t"].append(float(vfe))
+        self.history["vfe"].append(float(vfe))
 
         # Log - append row to DataFrame
         row = pd.DataFrame(
@@ -343,7 +316,7 @@ class HGFPaper2Gaussian(Model):
         ax.legend()
         ax.grid(True, alpha=0.3)
 
-        # 3) Volatility belief (mu2) + omega = exp(mu2_hat)
+        # 3) Volatility belief (mu2) + omega = exp(mu2_prev)
         ax = axes[2]
         mu2 = self.history["mu2"].values
         sig2 = np.maximum(self.history["sig2"].values, 0.0)
