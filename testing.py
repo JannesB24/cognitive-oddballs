@@ -124,8 +124,52 @@ def comparing_mean_jumps(m1: Weber_model, m2: Weber_model, model_names: list) ->
 
     return comparison
 
+### trying to find starting values, that make the model run according to Prof. Webers suggestions
 
-### Code is set up to be (un-)commented as needed
+## comparing the mean first jumps across many instantiations of both environments
+
+# jumps_overview = pd.DataFrame({"Environment": ["Cange Point", "Random Walk"], "mean first jump": [0,0]})
+# cp_jumps = []
+# rw_jumps = []
+
+# for i in range(1001):
+#     current_cp = generate_change_point_environment(n_trials=10, oddball_hazard_rate=0.15, sigma=20, change_point_hazard_rate=0.1,seed=i)["x"].to_numpy()
+#     current_rw = generate_random_walk_environment(n_trials=10, oddball_hazard_rate=0.15, sigma=20,seed=i)["x"].to_numpy()
+#     current_cp_jump = abs(current_cp[0]-current_cp[1])
+#     current_rw_jump = abs(current_rw[0]-current_rw[1])
+
+#     cp_jumps.append(current_cp_jump)
+#     rw_jumps.append(current_rw_jump)
+
+# jumps_overview.loc[0, "mean first jump"] = np.mean(cp_jumps)
+# jumps_overview.loc[1, "mean first jump"] = np.mean(rw_jumps)
+
+# print(jumps_overview)
+
+# plt.plot(cp_jumps)
+# plt.plot(rw_jumps)
+
+
+### looking at the difference between the first observation and 250 for many instantiations of the environments
+# cp_diffs = []
+# rw_diffs = []
+
+# for i in range(1001):
+#     current_cp = generate_change_point_environment(n_trials=10, oddball_hazard_rate=0.15, sigma=20, change_point_hazard_rate=0.1,seed=i)["x"].to_numpy()
+#     current_rw = generate_random_walk_environment(n_trials=10, oddball_hazard_rate=0.15, sigma=20,seed=i)["x"].to_numpy()
+#     current_cp_diff = abs(250-current_cp[0])
+#     current_rw_diff = abs(250-current_rw[0])
+
+#     cp_diffs.append(current_cp_diff)
+#     rw_diffs.append(current_rw_diff)
+
+# diffs_overview = pd.DataFrame({"CP diffs": cp_diffs, "RW diffs": rw_diffs})
+# diffs_overview.to_csv("diffs_overview.csv")
+
+### Code is set up to be (un-)commented as needed 
+# the code evolved over time and was updated to fit the current build of the model (some of the things done might seem redundant due to the developing context over time)
+
+## the default parameters currently implemented for Weber_model are the ones allowing the model to run with only 3 nodes (as Weber suggested)
 
 # # ## generating data from both environments
 change_point_data = generate_change_point_environment(n_trials=1000, oddball_hazard_rate=0.15, sigma=20, change_point_hazard_rate=0.1, seed=42)
@@ -155,24 +199,26 @@ test_rw_4_nodes_s = Weber_model(n_nodes=4, update_type="standard").input_data(ra
 test_cp_4_nodes_s = Weber_model(n_nodes=4, update_type="standard").input_data(change_point_data["x"].to_numpy())
 
 # ## 3 nodes
-# test_rw_3_nodes = Weber_model(n_nodes=3).input_data(random_walk_data["x"].to_numpy())
-# test_cp_3_nodes = Weber_model(n_nodes=3).input_data(change_point_data["x"].to_numpy())
+test_rw_3_nodes = Weber_model(n_nodes=3).input_data(random_walk_data["x"].to_numpy())
+test_cp_3_nodes = Weber_model(n_nodes=3).input_data(change_point_data["x"].to_numpy())
 
 # ##3 nodes with "standard" as update type
-# test_rw_3_nodes_s = Weber_model(n_nodes=3, update_type="standard").input_data(random_walk_data["x"].to_numpy())
-# test_cp_3_nodes_s = Weber_model(n_nodes=3, update_type="standard").input_data(change_point_data["x"].to_numpy())
+test_rw_3_nodes_s = Weber_model(n_nodes=3, update_type="standard").input_data(random_walk_data["x"].to_numpy())
+test_cp_3_nodes_s = Weber_model(n_nodes=3, update_type="standard").input_data(change_point_data["x"].to_numpy())
 
 ### comparing the surprises of the test models in the change point environment
-# cp_surprise_comparison = compare_surprise([test_cp_high_p, test_cp_high_p_s, test_cp_low_p,test_cp_low_p_s, test_cp_4_nodes,test_cp_4_nodes_s, test_cp_3_nodes, test_cp_3_nodes_s],["test_cp_high_p","test_cp_high_p_s", "test_cp_low_p","test_cp_low_p_s", "test_cp_4_nodes","test_cp_4_nodes_s", "test_cp_3_nodes", "test_cp_3_nodes_s"])
-# print(cp_surprise_comparison)
+print("comparing the surprises of the test models in the change point environment")
+cp_surprise_comparison = compare_surprise([test_cp_high_p, test_cp_high_p_s, test_cp_low_p,test_cp_low_p_s, test_cp_4_nodes,test_cp_4_nodes_s, test_cp_3_nodes, test_cp_3_nodes_s],["test_cp_high_p","test_cp_high_p_s", "test_cp_low_p","test_cp_low_p_s", "test_cp_4_nodes","test_cp_4_nodes_s", "test_cp_3_nodes", "test_cp_3_nodes_s"])
+print(cp_surprise_comparison)
 #
 ## RESULT
 ## with the current default parameters, that allow the model to properly run with a lower number of nodes, the model with 4 nodes performs the best in regards to total surprise of node 0
 ## using "standard" as the update type prevents the 5 node models from dropping out, they still perform worse than the 4 node model
 
 # ### comparing the surprises of the test models in the random walk environment
-# rw_surprise_comparison = compare_surprise([test_rw_low_p,test_rw_low_p_s,test_rw_high_p, test_rw_high_p_s,test_rw_4_nodes,test_rw_4_nodes_s,test_rw_3_nodes,test_rw_3_nodes_s],["test_rw_low_p","test_rw_low_p_s","test_rw_high_p","test_rw_high_p_s","test_rw_4_nodes","test_rw_4_nodes_s","test_rw_3node","test_rw_3_nodes_s"])
-# print(rw_surprise_comparison)
+print("comparing the surprises of the test models in the random walk environment")
+rw_surprise_comparison = compare_surprise([test_rw_low_p,test_rw_low_p_s,test_rw_high_p, test_rw_high_p_s,test_rw_4_nodes,test_rw_4_nodes_s,test_rw_3_nodes,test_rw_3_nodes_s],["test_rw_low_p","test_rw_low_p_s","test_rw_high_p","test_rw_high_p_s","test_rw_4_nodes","test_rw_4_nodes_s","test_rw_3node","test_rw_3_nodes_s"])
+print(rw_surprise_comparison)
 # #
 # ## RESULT
 # ## with the current default parameters, that allow the model to properly run with a lower number of nodes, the model with 4 nodes and "standard" update type performs the best in regards to total surprise of node 0
@@ -181,11 +227,13 @@ test_cp_4_nodes_s = Weber_model(n_nodes=4, update_type="standard").input_data(ch
 
 # ## comparing the surprise of the 4 node model across environments and update-types
 #
-# surprise_comparison_4n = compare_surprise([test_rw_4_nodes,test_rw_4_nodes_s, test_cp_4_nodes,test_cp_4_nodes_s],["test_rw_4_nodes","test_rw_4_nodes_s", "test_cp_4_nodes","test_cp_4_nodes_s"])
-# print(surprise_comparison_4n)
+print("comparing the surprise of the 4 node model across environments and update-types")
+surprise_comparison_4n = compare_surprise([test_rw_4_nodes,test_rw_4_nodes_s, test_cp_4_nodes,test_cp_4_nodes_s],["test_rw_4_nodes","test_rw_4_nodes_s", "test_cp_4_nodes","test_cp_4_nodes_s"])
+print(surprise_comparison_4n)
 #
 # ## RESULT
 # ## Best performance in random walk environment if update-type is "standard" (6538), if using the default one model performs better in Change point environment (seed 42: 6831 vs. 7047)
+# ## With "standard" update type the difference between performance in cp and rw environments is not very big (6566 vs. 6538)
 
 
 # ## extracting the node trajectories as data frames
@@ -285,59 +333,38 @@ test_cp_4_nodes_s = Weber_model(n_nodes=4, update_type="standard").input_data(ch
 # # saving to csv to ease inspection
 # mean_and_jump_comp_hp_lp.to_csv("hp_lp_jump_comp.csv")
 
-# ##RESULT
-# although the objective jumps in observations are the same, the 5 node model with low precision drops out at a lower jump 
 
 
-### saving stuff into cvs
-##
-# test_rw_low_p.to_pandas().to_csv("testing_rw_l.csv")
-# test_od_high_p.to_pandas().to_csv("testing_od_h.csv")
-# test_rw_3node_df.to_csv("testing_rw_without_n4.csv")
-# test_rw_n4_va_hp_df.to_csv("test_rw_n4_va_hp.csv")
+# ### saving stuff trajectories into csvs to ease inspection
+# #
+# # 5 nodes (different precisions)
+# test_rw_low_p.to_pandas().to_csv("test_rw_low_p.csv")
+# test_cp_low_p.to_pandas().to_csv("test_cp_low_p.csv")
+# test_rw_high_p.to_pandas().to_csv("test_rw_high_p.csv")
+# test_cp_high_p.to_pandas().to_csv("test_cp_high_p.csv")
 
+# ## 5 nodes with "standard" as the update type
+# test_rw_low_p_s.to_pandas().to_csv("test_rw_low_p_s.csv")
+# test_cp_low_p_s.to_pandas().to_csv("test_cp_low_p_s.csv")
+# test_rw_high_p_s.to_pandas().to_csv("test_rw_high_p_s.csv")
+# test_cp_high_p_s.to_pandas().to_csv("test_cp_high_p_s.csv")
 
+# ## 4 nodes
+# test_rw_4_nodes.to_pandas().to_csv("test_rw_4_nodes.csv")
+# test_cp_4_nodes.to_pandas().to_csv("test_cp_4_nodes.csv")
 
-# test.plot_trajectories()
-# test2.plot_trajectories()
-# test3.plot_trajectories()
-# test4.plot_trajectories()
-# jumps_overview = pd.DataFrame({"Environment": ["Cange Point", "Random Walk"], "mean first jump": [0,0]})
-# cp_jumps = []
-# rw_jumps = []
+# ## 4 nodes with "standard" as the update type
+# test_rw_4_nodes_s.to_pandas().to_csv("test_rw_4_nodes_s.csv")
+# test_cp_4_nodes_s.to_pandas().to_csv("test_cp_4_nodes_s.csv")
 
-# for i in range(1001):
-#     current_cp = generate_change_point_environment(n_trials=10, oddball_hazard_rate=0.15, sigma=20, change_point_hazard_rate=0.1,seed=i)["x"].to_numpy()
-#     current_rw = generate_random_walk_environment(n_trials=10, oddball_hazard_rate=0.15, sigma=20,seed=i)["x"].to_numpy()
-#     current_cp_jump = abs(current_cp[0]-current_cp[1])
-#     current_rw_jump = abs(current_rw[0]-current_rw[1])
+# ## 3 nodes
+# test_rw_3_nodes.to_pandas().to_csv("test_rw_3_nodes.csv")
+# test_cp_3_nodes.to_pandas().to_csv("test_cp_3_nodes.csv")
 
-#     cp_jumps.append(current_cp_jump)
-#     rw_jumps.append(current_rw_jump)
+# ## 3 nodes with "standard" as the update type
+# test_rw_3_nodes_s.to_pandas().to_csv("test_rw_3_nodes_s.csv")
+# test_cp_3_nodes_s.to_pandas().to_csv("test_cp_3_nodes_s.csv")
 
-# jumps_overview.loc[0, "mean first jump"] = np.mean(cp_jumps)
-# jumps_overview.loc[1, "mean first jump"] = np.mean(rw_jumps)
-
-# print(jumps_overview)
-
-# plt.plot(cp_jumps)
-# plt.plot(rw_jumps)
-
-
-# cp_diffs = []
-# rw_diffs = []
-
-# for i in range(1001):
-#     current_cp = generate_change_point_environment(n_trials=10, oddball_hazard_rate=0.15, sigma=20, change_point_hazard_rate=0.1,seed=i)["x"].to_numpy()
-#     current_rw = generate_random_walk_environment(n_trials=10, oddball_hazard_rate=0.15, sigma=20,seed=i)["x"].to_numpy()
-#     current_cp_diff = abs(250-current_cp[0])
-#     current_rw_diff = abs(250-current_rw[0])
-
-#     cp_diffs.append(current_cp_diff)
-#     rw_diffs.append(current_rw_diff)
-
-# diffs_overview = pd.DataFrame({"CP diffs": cp_diffs, "RW diffs": rw_diffs})
-# diffs_overview.to_csv("diffs_overview.csv")
 
 #------------------------------------------OUTDATED----------------------------------------------------#
 
