@@ -120,18 +120,11 @@ def run_experiment(
     results = {}
 
     for model_name, model in models.items():
-        # Initialize arrays to collect data across simulations
-        all_learning_rates = np.zeros((n_simulations, n_trials))
-        all_prediction_errors = np.zeros((n_simulations, n_trials))
-        all_updates = np.zeros((n_simulations, n_trials))
-        all_beliefs = np.zeros((n_simulations, n_trials))
-        all_responses = np.zeros((n_simulations, n_trials))
-        all_loglik = np.zeros(n_simulations)
-        all_rmse = np.zeros(n_simulations)
+        model_sim_results = []
 
-        for sim in range(n_simulations):
+        for _ in range(n_simulations):
             # Generate a new environment for each simulation
-            environment = environment_fn(n_trials=n_trials)
+            environment = environment_fn(n_trials=n_trials, oddball_hazard_rate=0.0)
 
             response_model = GaussianResponseModel(response_noise_std)
             outputs = run_model_on_environment(model, response_model, environment)
@@ -141,25 +134,17 @@ def run_experiment(
             total_rmse = rmse(outputs["beliefs"].to_numpy()[1:], environment["x"].to_numpy())
 
             total_surprise = np.sum(outputs["variational_free_energy"]) * -1
-            test = 0
-            # Store the results for this simulation
-            # all_learning_rates[sim] = lr
-            # all_prediction_errors[sim] = outputs["prediction_errors"]
-            # all_updates[sim] = outputs["updates"]
-            # all_beliefs[sim] = outputs["beliefs"]
-            # all_responses[sim] = outputs["responses"]
-            # all_loglik[sim] = np.sum(outputs["log_likelihoods"])
-            # all_rmse[sim] = rmse(outputs["beliefs"], outputs["responses"])
 
-        # results[model_name] = {
-        #     "learning_rate": all_learning_rates,
-        #     "prediction_errors": all_prediction_errors,
-        #     "updates": all_updates,
-        #     "beliefs": all_beliefs,
-        #     "responses": all_responses,
-        #     "log_likelihood": all_loglik,
-        #     "rmse": all_rmse,
-        # }
+            model_sim_result = {
+                "environment": environment,
+                "model_outputs": outputs,
+                "rmse": total_rmse,
+                "surprise": total_surprise,
+            }
+
+            model_sim_results.append(model_sim_result)
+
+        results[model_name] = model_sim_results
 
     return results
 
@@ -167,20 +152,30 @@ def run_experiment(
 # Experiment 1:
 # Changepoint oddball
 
+# mu0 = 250, ln_sigma0 = -5, ln_s = 0.1, ln_w1 = 0.01, ln_w2 = 8.0, ln_h_div_1_h= -3.0,
+
 
 def experiment_changepoint():
     models: dict[str, Model] = {
         "CPM": ChangePointModelVariational(
             mu0=250, sigma0=50, obs_noise_std=25, w1_std=0.1, w2_std=30, h=0.1
         ),
-        "HGF": HGFPaper2Gaussian(eta=0.005, s=15.0**2, mu1_init=250.0),
-        # "gHGF": WeberModel(node4=True, node_4_type="volatility_parent", n4_p=3.0),
+        # "CPM": ChangePointModelVariational(
+        #     mu0=250,
+        #     sigma0=np.exp(-5),
+        #     obs_noise_std=np.exp(0.1),
+        #     w1_std=np.exp(0.01),
+        #     w2_std=np.exp(8.0),
+        #     h=1 / (1 + np.exp(-3.0)),
+        # ),
+        "HGF": HGFPaper2Gaussian(eta=0.005, s=15.0, mu1_init=250.0),
+        "gHGF": WeberModel(node4=True, node_4_type="volatility_parent", n4_p=3.0),
     }
 
     return run_experiment(
         environment_fn=generate_change_point_environment,
         models=models,
-        n_trials=1000,
+        n_trials=100,
         n_simulations=1,
     )
 
