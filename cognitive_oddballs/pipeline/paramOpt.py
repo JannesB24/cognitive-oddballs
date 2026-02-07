@@ -61,60 +61,30 @@ def objective_function_cma_theta(
     envs:        pd.df containg info of pre-generated environment
     """
     total_obj = 0.0
-    for env in envs: # env type: <class 'pandas.core.frame.DataFrame'>
-        #for observations x in env:
-        if "x" in env.columns:
-            observations = env["x"].to_numpy(dtype=float)
-        
-            model = model_cls() # fresh model each run
-            model.set_parameters_cma(theta)
 
-            obj = model.objective_cma(observations)
-            total_obj += float(obj)
-
-    return total_obj / len(envs)
-
-    """ try:
-    for env in envs:
-        # --- convert environment to 1D float array of observations ---
-        if isinstance(env, pd.DataFrame):
-            # adjust 'x' if your generator uses a different column name
+    try:
+        for env in envs: # env type: <class 'pandas.core.frame.DataFrame'>
+            #for observations x in env:
             if "x" in env.columns:
                 observations = env["x"].to_numpy(dtype=float)
+            
+                model = model_cls() # fresh model each run
+                model.set_parameters_cma(theta)
+
+                obj = model.objective_cma(observations)
+
+                if not np.isfinite(obj):
+                    raise FloatingPointError(f"Non-finite objective: {obj}")
+
+                total_obj += float(obj)
+
             else:
                 raise ValueError(
                     f"DataFrame environment has no 'x' column; "
                     f"columns={list(env.columns)}"
                 )
-        else:
-            # assume it's already array-like
-            observations = np.asarray(env, dtype=float)
-
-        model = model_cls()  # fresh model each run
-        model.set_parameters_cma(theta)
-
-        obj = model.objective_cma(observations)
-
-        if not np.isfinite(obj):
-            raise FloatingPointError(f"Non-finite objective: {obj}")
-
-        total_obj += float(obj)
-    """
-
-    """try:
-        for observations in envs:
-            model = model_cls() # fresh model each run
-            model.set_parameters_cma(theta)
-
-            obj = model.objective_cma(observations)
-
-            if not np.isfinite(obj):
-                raise FloatingPointError(f"Non-finite objective: {obj}")
-
-            total_obj += float(obj)
-
         return total_obj / len(envs)
-
+    
     except Exception as e:
         msg = (
             f"[CMA safeguard] {model_cls.__name__} failed for theta={theta}: "
@@ -123,7 +93,7 @@ def objective_function_cma_theta(
         logger.warning(msg)
 
         # large penalty so CMA-ES moves away from region
-        return penalty"""
+        return penalty    
 
         
 def cma_optimization(cma_params: dict, envs: list[np.ndarray], seed: int = 42):
