@@ -62,42 +62,6 @@ def log_likelihood(predictions: np.ndarray, targets: np.ndarray, noise_std: floa
     residuals = targets - predictions
     return -0.5 * np.sum((residuals / noise_std) ** 2 + np.log(2 * np.pi * noise_std**2))
 
-def calculate_trial_gaussian_vfe(o_t, mu_pred, var_pred, obs_noise_var):
-    """
-    For linear-Gaussian filtering models ELBO reduces to:
-    F_t $\approx$ log p(o_t | O_{t-1})
-    --> need to calculate p(stimulus | past_observations, \theta)
-    BUT this solution would need the models to make variance predictions, which I'm not sure they do?
-    assumes:
-    - stimulus o_t
-    - model's prior predictive mean mu_pred
-    - models prior predictive variance var_pred
-    - observation noise variance \sigma_{obs}^2
-    """
-    
-    total_var = var_pred + obs_noise_var # can i get that with self.sigma?
-    trial_vfe = -0.5 * ((o_t - mu_pred) ** 2 / total_var + np.log(2 * np.pi + total_var))
-
-    return trial_vfe
-
-def calculate_sequence_gaussian_vfe(obs, mu_preds, var_preds, obs_noise_var):
-    """
-    Sum of trial-wise free energies over the whole sequence
-
-    The variational free energy provides the lower bound on the marginal log-likelihood 
-    Expect higher likelihood (lower surprise) -- hence, better performance -- for the sensory stimuli that was generated from the same process that
-    defines the corresponding perceptual model
-    F is thus always <= true log evidence 
-    """
-    obs = np.asarray(obs)
-    mu_preds = np.asarray(mu_preds)
-    var_preds = np.asarray(var_preds)
-
-    trial_vfe = calculate_trial_gaussian_vfe(obs, mu_preds, var_preds, obs_noise_var)
-
-    # reurn both total vfe and per trial vfe
-    return np.sum(trial_vfe), trial_vfe
-
 
 def compute_apparent_learning_rate(updates, prediction_errors):
     """
@@ -120,7 +84,7 @@ class GaussianResponseModel:
     r"""
     r_t = \mu_t + \epsilon
     \epsilon \sim \mathcal{N}(0, \sigma_r^2)
-    """
+    r"""
 
     def __init__(self, response_noise_std: float):
         self.sigma = response_noise_std
@@ -254,7 +218,7 @@ def run_experiment(
 def experiment_changepoint():
     models: dict[str, Model] = {
         "CPM": ChangePointModelVariational(mu0=250, sigma0=50, obs_noise=5, w1=0.5, w2=0.5, h=0.1),
-        "gHGF": WeberModel(node4=True, node_4_type="volatility_parent", n4_p=3.0),
+        "gHGF": WeberModel(node4=True, node_4_type="volatility_parent", n4_p=3.0), # TODO
         "HGF": HGFPaper2Gaussian(
             eta=0.005, s=15.0**2, mu1_init=0.0, sig1_init=10.0, mu2_init=-4.0, sig2_init=1.0
         ),
@@ -274,7 +238,17 @@ def experiment_changepoint():
 
 def experiment_randomwalk():
     models = {
-        "CPM": ChangePointModelVariational(mu0=250, sigma0=50, obs_noise=5, w1=0.5, w2=0.5, h=0.1),
+        "OG": ChangePointNassarModel(x=[250], sigma_sequence=[25]),
+        #"CPM": ChangePointModelVariational(mu0=250, sigma0=50, obs_noise=5, w1=0.5, w2=0.5, h=0.1),
+        "CPM": ChangePointModelVariational(
+            mu0=250,  # Start at center
+            sigma0=25,
+            obs_noise=25,
+            w1=10,  # Higher drift for random walk
+            w2=1000,
+            h=0.1,
+            add_second_level=True,
+        ),
         "gHGF": WeberModel(node4=True, node_4_type="volatility_parent", n4_p=3.0),
         "HGF": HGFPaper2Gaussian(
             eta=0.005, s=15.0**2, mu1_init=0.0, sig1_init=10.0, mu2_init=-4.0, sig2_init=1.0
@@ -311,6 +285,8 @@ def plot_learning_rate_vs_error(results: dict, title: str):
     plt.legend()
     plt.tight_layout()
     plt.show()
+
+    plt.savefig(FIGURES_DIR / f"learning_rate_vs_error_{title.replace(' ', '_')}.png")
 
 
 # Main

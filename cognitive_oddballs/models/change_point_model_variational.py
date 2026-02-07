@@ -31,6 +31,7 @@ from cognitive_oddballs.models.model import Model
 logger = logging.getLogger(__name__)
 
 class ChangePointModelVariational(Model):
+class ChangePointModelVariational(Model):
     """
     Change Point Model using Variational Bayesian Inference.
 
@@ -38,24 +39,22 @@ class ChangePointModelVariational(Model):
     Bayesian inference from Marković & Kiebel (2016), Section 4.1.2.
 
     The model assumes the environment switches between:
-    - Stability: x_t = x_{t-1} + √w₁ · noise
-    - Change-point: x_t = √w₂ · noise
+    - Stability (1 - h): x_t = x_{t-1} + √w₁ · noise
+    - Change-point (h): x_t = √w₂ · noise
 
     Parameters
     ----------
-    x : array-like
-        Observed outcomes (e.g., bag drop positions)
     mu0 : float
         Initial belief about hidden state (μ₀¹)
     sigma0 : float
         Initial uncertainty (σ₀¹)
     obs_noise : float
-        Observation noise standard deviation (s)
+        Observation noise STANDARD DEVIATION (s)
     w1 : float
         Diffusion rate during stability periods (w₁)
         Typical value: 0.01 (small drift)
     w2 : float
-        Change-point variance (w₂)
+        Change-point VARIANCE (w₂)
         Typical value: 100-1000 (large jumps)
     h : float
         Hazard rate - prior probability of change-point (h)
@@ -81,8 +80,7 @@ class ChangePointModelVariational(Model):
     --------
     >>> import numpy as np
     >>> observations = np.random.normal(250, 10, 100)
-    >>> model = ChangePointModel_Variational(
-    ...     x=observations,
+    >>> model = ChangePointModelVariational(
     ...     mu0=250,
     ...     sigma0=10,
     ...     obs_noise=10,
@@ -113,7 +111,7 @@ class ChangePointModelVariational(Model):
 
         # ===== First-level latent states =====
         self.mu = mu0  # μ^(1) - Posterior expectation
-        self.sigma = sigma0  # σ^(1) - Posterior std dev
+        self.sigma = sigma0  # σ^(1) - Posterior STANDARD DEVIATION
 
         # ===== Second-level states (for HGF comparability) =====
         self.add_second_level = add_second_level
@@ -149,7 +147,7 @@ class ChangePointModelVariational(Model):
     # Second-level transformations (for HGF comparability)
     # --------------------------------------------------
 
-    def _omega_to_mu2(self, omega, scaling=1.0):
+    def _omega_to_mu2(self, omega, scaling=1.0) -> float:
         """
         Convert change-point probability to second-level representation.
 
@@ -175,7 +173,7 @@ class ChangePointModelVariational(Model):
         omega = np.clip(omega, 1e-6, 1 - 1e-6)
         return (1 / scaling) * np.log(omega / (1 - omega))
 
-    def _mu2_to_omega(self, mu2, scaling=1.0):
+    def _mu2_to_omega(self, mu2: float, scaling: float = 1.0) -> float:
         """
         Convert second-level representation back to change-point probability.
 
@@ -200,7 +198,7 @@ class ChangePointModelVariational(Model):
     # Core inference functions
     # --------------------------------------------------
 
-    def _change_point_probability(self, delta):
+    def _change_point_probability(self, delta: float) -> float:
         """
         Compute change-point probability Ω_t using Bayes rule.
 
@@ -227,12 +225,12 @@ class ChangePointModelVariational(Model):
         # Likelihood under stability (no change-point)
         # x_t follows x_{t-1} with small drift w1
         var_stability = self.sigma**2 + self.w1 + self.obs_noise**2
-        like_stability = stats.norm.pdf(delta, 0.0, np.sqrt(var_stability))
+        like_stability = stats.norm.pdf(delta, loc=0.0, scale=np.sqrt(var_stability))
 
         # Likelihood under change-point
         # x_t is drawn from a wide distribution (large w2)
         var_change = self.obs_noise**2 + self.w2
-        like_change = stats.norm.pdf(delta, 0.0, np.sqrt(var_change))
+        like_change = stats.norm.pdf(delta, loc=0.0, scale=np.sqrt(var_change))
 
         # Bayes rule with hazard rate as prior
         numerator = self.hazard_rate * like_change
@@ -285,6 +283,7 @@ class ChangePointModelVariational(Model):
         # 6. Second-level update (if enabled)
         epsilon2 = 0.0
         alpha2 = 0.0
+
         if self.add_second_level:
             # Get previous change-point probability
             omega_prev = (
@@ -313,7 +312,14 @@ class ChangePointModelVariational(Model):
         # 8. Store history
         self._store_history(delta, omega, alpha, epsilon2, alpha2)
 
-    def _store_history(self, delta, omega, alpha, epsilon2=0.0, alpha2=0.0):
+    def _store_history(
+        self,
+        delta: float,
+        omega: float,
+        alpha: float,
+        epsilon2: float = 0.0,
+        alpha2: float = 0.0,
+    ) -> None:
         """Store trial results in history."""
         row_data = {
             "beliefs": self.mu,
@@ -373,11 +379,21 @@ class ChangePointModelVariational(Model):
             "learning_rates": 0.0,
             "uncertainties": self.sigma,
             "change_point_probs": 0.0,
+        initial_data = {
+            "beliefs": self.mu,
+            "prediction_errors": 0.0,
+            "learning_rates": 0.0,
+            "uncertainties": self.sigma,
+            "change_point_probs": 0.0,
         }
 
         if self.add_second_level:
             initial_data.update(
+            initial_data.update(
                 {
+                    "mu2": self.mu2,
+                    "epsilon2": 0.0,
+                    "alpha2": 0.0,
                     "mu2": self.mu2,
                     "epsilon2": 0.0,
                     "alpha2": 0.0,
@@ -386,38 +402,11 @@ class ChangePointModelVariational(Model):
 
         self.history = pd.DataFrame([initial_data])
 
+        self.history = pd.DataFrame([initial_data])
+
         # Run updates for trials 1 to T-1
         for t in range(1, len(observations)):
             self.update(observations[t])
-
-        # Create output DataFrame
-        # df_dict = {
-        #     "Trial": np.arange(1, len(observations) + 1),
-        #     "BagDrop": observations,
-        #     "Belief": self.history["beliefs"].values,
-        #     "CPP": self.history["change_point_probs"].values,
-        #     "Uncertainty": self.history["uncertainties"].values,
-        #     "LearningRate": self.history["learning_rates"].values,
-        #     "PredictionError": self.history["prediction_errors"].values,
-        # }
-
-        # if self.add_second_level:
-        #     df_dict.update(
-        #         {
-        #             "Mu2": self.history["mu2"].values,
-        #             "Epsilon2": self.history["epsilon2"].values,
-        #             "Alpha2": self.history["alpha2"].values,
-        #         }
-        #     )
-
-        # df = pd.DataFrame(df_dict)
-
-        # beliefs (Nassar: Belief; Weber: x_0_expected_mean)
-        # observations/targets (location bag drops: Nassar: BagDrop; Weber: x_0_mean; for all models, depends on environment)
-        # responses (are computed in eval)
-        # prediction_errors (Nassar: PredictionError, Weber: x_0_prediction_error)
-        # updates (new belief; Nassar: Belief of t+1; Weber: x_0_expected_mean of t+1)
-        # log_likelihood (computed in eval)
 
         output_columns = [
             # "Beliefs",
@@ -430,10 +419,6 @@ class ChangePointModelVariational(Model):
 
         rename_dict = {"beliefs": "raw_responses"}
 
-        # output["Beliefs"] = self.history["beliefs"].values
-        # output["Prediction Errors"] = self.history["prediction_errors"].values
-        # output["Updates"] = self.history["beliefs"].shift(-1).values
-        # output["Log Likelihoods"] = self.history["change_point_probs"].values
 
         return output.rename(columns=rename_dict)
     
@@ -726,7 +711,6 @@ if __name__ == "__main__":
 
     # Initialize CPM model with random walk environment
     cpm_model_walk = ChangePointModelVariational(
-        x=df_random_walk["x"].values,
         mu0=df_random_walk["x"].iloc[0],
         sigma0=25,
         obs_noise=25,

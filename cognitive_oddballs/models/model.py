@@ -8,6 +8,7 @@ class Model(ABC):
 
     @abstractmethod
     def run(self, observations: np.ndarray) -> pd.DataFrame:
+    def run(self, observations: np.ndarray) -> pd.DataFrame:
         """
         Run the model on each observation in sequence.
 

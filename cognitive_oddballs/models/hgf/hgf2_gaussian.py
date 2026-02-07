@@ -197,8 +197,48 @@ class HGFPaper2Gaussian(Model):
         self.history["delta1"].append(delta1)
         self.history["alpha1"].append(alpha1)
         self.history["delta2"].append(delta2)
-        self.history["k"].append(k)
-        self.history["r"].append(r)
+
+        # ------------ Free energy (eq. 29) ---------------
+        # TODO: LLM-generated -- verify correctness
+        s = self.cfg.s
+
+        den1 = max(sig1_prev + omega, minvar)
+        den2 = max(sig2_prev + self.cfg.eta, minvar)
+
+        term1 = -0.5 * np.log(s)
+        term2 = -0.5 * den1 / s
+        term3 = -0.5 * np.log(den1)
+        term4 = 0.5 * (sig1_new + (mu1_new - mu1_prev) ** 2) / den1
+        term5 = 0.5 * np.log(den2)
+        term6 = 0.5 * (sig2_new + (mu2_new - mu2_prev) ** 2) / den2
+        term7 = -0.5 * np.log(2.0 * np.pi)
+        term8 = 0.5 * np.log(max(sig1_new, minvar))
+        term9 = 0.5 * np.log(max(sig2_new, minvar))
+
+        vfe = term1 + term2 + term3 + term4 + term5 + term6 + term7 + term8 + term9
+        self.history["F_t"].append(float(vfe))
+
+        # Log - append row to DataFrame
+        row = pd.DataFrame(
+            {
+                "o": [o],
+                "mu1_hat": [mu1_prev],
+                "sig1_hat": [den1],
+                "mu1": [self.mu1],
+                "sig1": [self.sig1],
+                "mu2_hat": [mu2_hat],
+                "sig2_hat": [sig2_hat],
+                "mu2": [self.mu2],
+                "sig2": [self.sig2],
+                "omega": [omega],
+                "delta1": [delta1],
+                "alpha1": [alpha1],
+                "delta2": [delta2],
+                "k": [k],
+                "r": [r],
+            }
+        )
+        self.history = pd.concat([self.history, row], ignore_index=True)
 
     # ---------- Model interface implementation ----------
 
@@ -277,14 +317,14 @@ class HGFPaper2Gaussian(Model):
         true_x1: Iterable[Number] | None = None,
         true_x2: Iterable[Number] | None = None,
     ):
-        trials = np.arange(len(self.history["o"]))
+        trials = np.arange(len(self.history))
         fig, axes = plt.subplots(4, 1, figsize=(12, 12))
 
         # 1) Observations vs inferred state (mu1)
         ax = axes[0]
-        ax.plot(trials, self.history["o"], label="o (observation)", linewidth=1)
-        ax.plot(trials, self.history["mu1_hat"], label="mu1_hat (prediction)", linewidth=2)
-        ax.plot(trials, self.history["mu1"], label="mu1 (posterior)", linewidth=2)
+        ax.plot(trials, self.history["o"].values, label="o (observation)", linewidth=1)
+        ax.plot(trials, self.history["mu1_hat"].values, label="mu1_hat (prediction)", linewidth=2)
+        ax.plot(trials, self.history["mu1"].values, label="mu1 (posterior)", linewidth=2)
 
         if true_x1 is not None:
             ax.plot(trials, list(true_x1), label="true x1", linewidth=1)
@@ -295,8 +335,8 @@ class HGFPaper2Gaussian(Model):
 
         # 2) State uncertainty (sig1)
         ax = axes[1]
-        mu1 = np.array(self.history["mu1"])
-        sig1 = np.maximum(np.array(self.history["sig1"]), 0.0)
+        mu1 = self.history["mu1"].values
+        sig1 = np.maximum(self.history["sig1"].values, 0.0)
         ax.plot(trials, mu1, label="mu1", linewidth=2)
         ax.fill_between(trials, mu1 - np.sqrt(sig1), mu1 + np.sqrt(sig1), alpha=0.2)
         ax.set_ylabel("Level 1: x1 belief")
@@ -305,8 +345,8 @@ class HGFPaper2Gaussian(Model):
 
         # 3) Volatility belief (mu2) + omega = exp(mu2_hat)
         ax = axes[2]
-        mu2 = np.array(self.history["mu2"])
-        sig2 = np.maximum(np.array(self.history["sig2"]), 0.0)
+        mu2 = self.history["mu2"].values
+        sig2 = np.maximum(self.history["sig2"].values, 0.0)
         ax.plot(trials, mu2, label="mu2 (volatility belief)", linewidth=2)
         ax.fill_between(trials, mu2 - np.sqrt(sig2), mu2 + np.sqrt(sig2), alpha=0.2)
 
@@ -319,8 +359,8 @@ class HGFPaper2Gaussian(Model):
 
         # 4) Learning rate alpha1 + delta2 (diagnostics)
         ax = axes[3]
-        ax.plot(trials, self.history["alpha1"], label="alpha1 (learning rate)", linewidth=2)
-        ax.plot(trials, self.history["delta2"], label="delta2 (volatility PE)", linewidth=1)
+        ax.plot(trials, self.history["alpha1"].values, label="alpha1 (learning rate)", linewidth=2)
+        ax.plot(trials, self.history["delta2"].values, label="delta2 (volatility PE)", linewidth=1)
         ax.set_ylabel("Diagnostics")
         ax.set_xlabel("Trial")
         ax.legend()
