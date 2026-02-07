@@ -7,12 +7,11 @@ import matplotlib.pyplot as plt
 
 def compare_trajectories(models: list, node_idx: int, col_to_compare: str) -> pd.DataFrame:
     """Compiles the wanted node_trajectories into a DataFrame to ease comparison.
-    Both Models must have the node to be compared
+    All Models must have the node to be compared
     
     Input:
-    - m_1: First Model to be compared
-    - m_2: Second Model to be compared
-    - node_idx: Index of the node to be compared
+    - models: a list containing the models to be compared
+    - node_idx: Index of the node to be compared (must be present in all models)
     - col_to_compare: Possible values: "expected_mean","expected_precision","mean","precision","surprise" 
     
     Output:
@@ -33,6 +32,7 @@ def compare_trajectories(models: list, node_idx: int, col_to_compare: str) -> pd
         model_col_name = str("x_"+str(node_idx)+"_"+col_to_compare)
         df_col_name = str("Model "+ str(nth_model)+" Node " + str(node_idx) + " " + col_to_compare)
         output[df_col_name] = current_df[model_col_name]
+        nth_model+=1
         
     return output
 
@@ -87,6 +87,43 @@ def compare_highest_jump(models: list, model_names:list) -> pd.DataFrame:
 
     return comparison
 
+def comparing_mean_jumps(m1: Weber_model, m2: Weber_model, model_names: list) -> pd.DataFrame:
+    """ Compares the node 0 means of two given models and the jumps in those trajectories.
+    Input:
+    - m1: The first model to be compared
+    - m2: The second model to be compared
+    - model_names: A list of strings naming the compared models
+
+    Output:
+    - prints information about the objectively largest jump (if all means are the same) and what the largest jumps the models actually perceived are.
+    - comparison: A pandas Dataframe containing the means of the given models, whether they are the same and jumps between the observed means.
+    
+    If all means are the same there is only one "Jumps" collumn, else there is a "Jumps" collumn for each model respectively
+    """
+    comparison = compare_trajectories([m1,m2], 0, "mean")
+    comparison["Is same"] = comparison.iloc[:,0] == comparison.iloc[:,1]
+    if len(comparison) == sum(comparison["Is same"]):
+        comparison["Jumps"]= range(len(comparison))
+        for i in range(1,len(comparison)):
+            comparison.loc[i, "Jumps"] = abs(comparison.iloc[i, 0] - comparison.iloc[i-1,0])
+        
+        print("Objective max. Jump in Observations: " + str(max(comparison["Jumps"])))
+    else:
+        m1_col_name = model_names[0] + " Jumps"
+        m2_col_name = model_names[1] + " Jumps"
+        comparison[m1_col_name] = range(len(comparison))
+        comparison[m2_col_name] = range(len(comparison))
+
+        for j in range(1,len(comparison)):
+            comparison.loc[j, m1_col_name] = abs(comparison.iloc[i, 0] - comparison.iloc[i-1,0])
+            comparison.loc[j, m2_col_name] = abs(comparison.iloc[i, 1] - comparison.iloc[i-1,1])
+
+    m1_max_jump, m1_at = m1.largest_jump()
+    m2_max_jump, m2_at = m2.largest_jump()
+    print("Subjective max. Jumps: \n - "+ model_names[0] + ": " + str(m1_max_jump) + " at index " + str(m1_at) + "\n - "+ model_names[1]+": " + str(m2_max_jump) + " at index " + str(m2_at))
+
+    return comparison
+
 
 ### Code is set up to be (un-)commented as needed
 
@@ -95,35 +132,35 @@ change_point_data = generate_change_point_environment(n_trials=1000, oddball_haz
 random_walk_data = generate_random_walk_environment(n_trials=1000, oddball_hazard_rate=0.15, sigma=20, seed=42)
 
 
-### creating Model instances with different parameters
+ ### creating Model instances with different parameters
 
-## 5 nodes (different precisions)
+ ## 5 nodes (different precisions)
 test_rw_low_p = Weber_model(n_nodes=5,x_4_p=3).input_data(random_walk_data["x"].to_numpy())
 test_cp_low_p = Weber_model(n_nodes=5,x_4_p=3).input_data(change_point_data["x"].to_numpy())
 test_rw_high_p = Weber_model(n_nodes=5).input_data(random_walk_data["x"].to_numpy())
 test_cp_high_p = Weber_model(n_nodes=5).input_data(change_point_data["x"].to_numpy())
 
-## 5 nodes with "standard" as the update type
+ ## 5 nodes with "standard" as the update type
 test_rw_low_p_s = Weber_model(n_nodes=5,x_4_p=3, update_type="standard").input_data(random_walk_data["x"].to_numpy())
 test_cp_low_p_s = Weber_model(n_nodes=5,x_4_p=3, update_type="standard").input_data(change_point_data["x"].to_numpy())
 test_rw_high_p_s = Weber_model(n_nodes=5, update_type="standard").input_data(random_walk_data["x"].to_numpy())
 test_cp_high_p_s = Weber_model(n_nodes=5, update_type="standard").input_data(change_point_data["x"].to_numpy())
 
-## 4 nodes
+ ## 4 nodes
 test_rw_4_nodes = Weber_model(n_nodes=4).input_data(random_walk_data["x"].to_numpy())
 test_cp_4_nodes = Weber_model(n_nodes=4).input_data(change_point_data["x"].to_numpy())
 
-## 4 nodes with "standard" as the update type
+ ## 4 nodes with "standard" as the update type
 test_rw_4_nodes_s = Weber_model(n_nodes=4, update_type="standard").input_data(random_walk_data["x"].to_numpy())
 test_cp_4_nodes_s = Weber_model(n_nodes=4, update_type="standard").input_data(change_point_data["x"].to_numpy())
 
-## 3 nodes
-test_rw_3_nodes = Weber_model(n_nodes=3).input_data(random_walk_data["x"].to_numpy())
-test_cp_3_nodes = Weber_model(n_nodes=3).input_data(change_point_data["x"].to_numpy())
+# ## 3 nodes
+# test_rw_3_nodes = Weber_model(n_nodes=3).input_data(random_walk_data["x"].to_numpy())
+# test_cp_3_nodes = Weber_model(n_nodes=3).input_data(change_point_data["x"].to_numpy())
 
-## 3 nodes with "standard" as update type
-test_rw_3_nodes_s = Weber_model(n_nodes=3, update_type="standard").input_data(random_walk_data["x"].to_numpy())
-test_cp_3_nodes_s = Weber_model(n_nodes=3, update_type="standard").input_data(change_point_data["x"].to_numpy())
+# ##3 nodes with "standard" as update type
+# test_rw_3_nodes_s = Weber_model(n_nodes=3, update_type="standard").input_data(random_walk_data["x"].to_numpy())
+# test_cp_3_nodes_s = Weber_model(n_nodes=3, update_type="standard").input_data(change_point_data["x"].to_numpy())
 
 ### comparing the surprises of the test models in the change point environment
 # cp_surprise_comparison = compare_surprise([test_cp_high_p, test_cp_high_p_s, test_cp_low_p,test_cp_low_p_s, test_cp_4_nodes,test_cp_4_nodes_s, test_cp_3_nodes, test_cp_3_nodes_s],["test_cp_high_p","test_cp_high_p_s", "test_cp_low_p","test_cp_low_p_s", "test_cp_4_nodes","test_cp_4_nodes_s", "test_cp_3_nodes", "test_cp_3_nodes_s"])
@@ -215,22 +252,21 @@ test_cp_3_nodes_s = Weber_model(n_nodes=3, update_type="standard").input_data(ch
 
 # ## comparing the highest jump between observations the models percieves before dropping out in the different environments and between different precision values for node 4
 ## with 5 nodes
-jump_comparison_5_nodes = compare_highest_jump([test_rw_low_p, test_rw_high_p, test_cp_low_p, test_cp_high_p], ["test_rw_low_p", "test_rw_high_p", "test_cp_low_p", "test_cp_high_p"])
-print(jump_comparison_5_nodes)
+# jump_comparison_5_nodes = compare_highest_jump([test_rw_low_p, test_rw_high_p, test_cp_low_p, test_cp_high_p], ["test_rw_low_p", "test_rw_high_p", "test_cp_low_p", "test_cp_high_p"])
+# print(jump_comparison_5_nodes)
 #
 ## with 4 nodes
-jump_comparison_4_nodes = compare_highest_jump([test_rw_4_nodes, test_cp_4_nodes],["test_rw_4_nodes", "test_cp_4_nodes"])
-print(jump_comparison_4_nodes)
+# jump_comparison_4_nodes = compare_highest_jump([test_rw_4_nodes, test_cp_4_nodes],["test_rw_4_nodes", "test_cp_4_nodes"])
+# print(jump_comparison_4_nodes)
 #
 # # RESULT
 # # high precision of node 4 leads the model to drop out at a smaller jump (/earlier) in the randomwalk environment (as compared to lower precision of node 4)
 # # while high precision of node 4 leads the model to persevere after a overall larger jump in the oddball environment
 
 
-
-## checking weird surprise spike in rw_3node
-# print("Highest Surprise: ", test_rw_3node.max_total_surprise())
-# test_rw_3node.plot_trajectories()
+## checking weird surprise spike in rw_4_nodes
+# print("Highest Surprise: ", test_rw_4_nodes.max_total_surprise())
+# test_rw_4_nodes.plot_trajectories()
 #
 ## RESULT
 ## High surprise at observation 504, because volatility was on a downward trajectory and suddenly jumped up when observation jumped from 269 to 6
@@ -238,14 +274,19 @@ print(jump_comparison_4_nodes)
 
 
 ### comparing node 0 mean trajectories and jumps
-# comparing_mean = pd.DataFrame({"With Node 4 ":lp_df["x_0_mean"], "Without Node 4": test_rw_3node_df["x_0_mean"], "Is_Same": (lp_df["x_0_mean"]==test_rw_3node_df["x_0_mean"]), "Jump":range(len(lp_df))})
-#
-# for i in range(1,len(lp_df)):
-#     comparing_mean.loc[i, "Jump"]= abs(comparing_mean.loc[i, "With Node 4 "]-comparing_mean.loc[i-1, "With Node 4 "])
-#
-# print(max(comparing_mean["Jump"]))
-# comparing_mean.to_csv("Comparing_means.csv")
 
+# # between 5 node model with low precision and 4 node model
+# mean_and_jump_comp_5_4 = comparing_mean_jumps(test_rw_low_p, test_rw_4_nodes, ["5 node model with low precision", "4 node model"])
+# # saving to csv to ease inspection
+# mean_and_jump_comp_5_4.to_csv("5_4_jump_comp.csv")
+
+# # between 5 node models with low and high precision
+# mean_and_jump_comp_hp_lp = comparing_mean_jumps(test_rw_low_p,test_rw_high_p, ["Low precision", "High precision"])
+# # saving to csv to ease inspection
+# mean_and_jump_comp_hp_lp.to_csv("hp_lp_jump_comp.csv")
+
+# ##RESULT
+# although the objective jumps in observations are the same, the 5 node model with low precision drops out at a lower jump 
 
 
 ### saving stuff into cvs
