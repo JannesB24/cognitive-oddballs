@@ -5,8 +5,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-def compare_trajectories(m_1: Weber_model, m_2: Weber_model, node_idx: int, col_to_compare: str) -> pd.DataFrame:
-    """Compares the given aspect of trajectories of the given Node in two models.
+def compare_trajectories(models: list, node_idx: int, col_to_compare: str) -> pd.DataFrame:
+    """Compiles the wanted node_trajectories into a DataFrame to ease comparison.
     Both Models must have the node to be compared
     
     Input:
@@ -16,39 +16,42 @@ def compare_trajectories(m_1: Weber_model, m_2: Weber_model, node_idx: int, col_
     - col_to_compare: Possible values: "expected_mean","expected_precision","mean","precision","surprise" 
     
     Output:
-    - DataFrame containing the values in question and the differences"""
+    - DataFrame containing the values in question"""
 
     accepted_columns = ["expected_mean","expected_precision","mean","precision","surprise"]
-
-    m1_df = m_1.to_pandas()
-    m2_df = m_2.to_pandas()
-
-    if len(m1_df.columns) < ((node_idx+1)*6 +4) or len(m2_df.columns) < ((node_idx+1)*6 +4):
-        raise ValueError("Node with given Index must be present in both Models.")
     if col_to_compare not in accepted_columns:
         raise ValueError("col_to_compare must be one of the following: 'expected_mean','expected_precision','mean','precision','surprise'")
     
-    col_name = str("x_"+str(node_idx)+"_"+col_to_compare)
-    col_name_m1 = str("Model 1 Node " + str(node_idx) + " " + col_to_compare)
-    col_name_m2 = str("Model 2 Node " + str(node_idx) + " " + col_to_compare)
-    return pd.DataFrame({col_name_m1: m1_df[col_name], col_name_m2: m2_df[col_name], "Difference": m1_df[col_name]-m2_df[col_name]})
+    output = pd.DataFrame()
+    nth_model = 1
+
+    for model in models:
+        current_df = model.to_pandas()
+        if len(current_df.columns) < ((node_idx+1)*6 +4):
+            raise ValueError("Node with given Index must be present in all Models.")
+        
+        model_col_name = str("x_"+str(node_idx)+"_"+col_to_compare)
+        df_col_name = str("Model "+ str(nth_model)+" Node " + str(node_idx) + " " + col_to_compare)
+        output[df_col_name] = current_df[model_col_name]
+        
+    return output
 
 
-def compare_surprise(models: list):
+def compare_surprise(models: list, model_names:list) -> pd.DataFrame:
     """Compares the over all surprise of node 0 of two given Models
     
     Input:
     - models: A list of models to be compared
-    
+    - model_names: A list containing the name identifying each model
+
     Output:
     - DataFrame containing the total surprises of node 0 for the models, the max surprise for each, whether it cuts of and which one has the lowest total surprise (excluding models which cut off)"""
 
 
-    comparison = pd.DataFrame({"Model": [" "]*len(models), "Total_Surprise":[1.1]*len(models), "Max_Surprise": [1.1]*len(models), "Cuts_off":  [False]*len(models) , "Has_lowest_surprise":[False]*len(models)})
+    comparison = pd.DataFrame({"Model":model_names, "Total_Surprise":[1.1]*len(models), "Max_Surprise": [1.1]*len(models), "Cuts_off":  [False]*len(models) , "Has_lowest_surprise":[False]*len(models)})
     for i in range(len(models)):
         current_model_df = models[i].to_pandas()
                       
-        comparison.loc[i, "Model"] = ("Model "+str(i+1))
         comparison.loc[i, "Total_Surprise"] = sum(current_model_df["x_0_surprise"])
         comparison.loc[i, "Max_Surprise"] = max(current_model_df["x_0_surprise"])
         comparison.loc[i, "Cuts_off"] = models[i].drops_out()
@@ -63,13 +66,36 @@ def compare_surprise(models: list):
 
     return comparison
 
+def compare_highest_jump(models: list, model_names:list) -> pd.DataFrame:
+    """Compares the highest jump between observations and whether the model dropped out
+    
+    Input:
+    - models: A list of models to be compared
+    - model_names: A list containing the name identifying each model
+    
+    Output:
+    -  A DataFrame containing the highest jump between observations the model percieves + index (before it drops out) and whether it does so"""
+
+
+    comparison = pd.DataFrame({"Model": model_names, "Highest Jump":[1.1]*len(models), "At": [1.1]*len(models), "Cuts off":  [False]*len(models)})
+    for i in range(len(models)):
+        highest_jump, at = models[i].largest_jump()
+
+        comparison.loc[i, "Highest Jump"] = highest_jump
+        comparison.loc[i, "At"] = at
+        comparison.loc[i, "Cuts off"] = models[i].drops_out()
+
+    return comparison
+
+
+### Code is set up to be (un-)commented as needed
 
 # # ## generating data from both environments
 change_point_data = generate_change_point_environment(n_trials=1000, oddball_hazard_rate=0.15, sigma=20, change_point_hazard_rate=0.1, seed=42)
 random_walk_data = generate_random_walk_environment(n_trials=1000, oddball_hazard_rate=0.15, sigma=20, seed=42)
 
 
-### creating Model instances to test the current attempts
+### creating Model instances with different parameters
 
 ## 5 nodes (different precisions)
 test_rw_low_p = Weber_model(n_nodes=5,x_4_p=3).input_data(random_walk_data["x"].to_numpy())
@@ -95,19 +121,20 @@ test_cp_4_nodes_s = Weber_model(n_nodes=4, update_type="standard").input_data(ch
 test_rw_3_nodes = Weber_model(n_nodes=3).input_data(random_walk_data["x"].to_numpy())
 test_cp_3_nodes = Weber_model(n_nodes=3).input_data(change_point_data["x"].to_numpy())
 
+## 3 nodes with "standard" as update type
+test_rw_3_nodes_s = Weber_model(n_nodes=3, update_type="standard").input_data(random_walk_data["x"].to_numpy())
+test_cp_3_nodes_s = Weber_model(n_nodes=3, update_type="standard").input_data(change_point_data["x"].to_numpy())
 
-# ### comparing the surprises of the test models in the change point environment
-# cp_surprise_comparison = compare_surprise([test_cp_high_p, test_cp_high_p_s, test_cp_low_p,test_cp_low_p_s, test_cp_4_nodes,test_cp_4_nodes_s, test_cp_3_nodes])
-# cp_surprise_comparison["Model"] = ["test_cp_high_p","test_cp_high_p_s", "test_cp_low_p","test_cp_low_p_s", "test_cp_4_nodes","test_cp_4_nodes_s", "test_cp_3_nodes"]
+### comparing the surprises of the test models in the change point environment
+# cp_surprise_comparison = compare_surprise([test_cp_high_p, test_cp_high_p_s, test_cp_low_p,test_cp_low_p_s, test_cp_4_nodes,test_cp_4_nodes_s, test_cp_3_nodes, test_cp_3_nodes_s],["test_cp_high_p","test_cp_high_p_s", "test_cp_low_p","test_cp_low_p_s", "test_cp_4_nodes","test_cp_4_nodes_s", "test_cp_3_nodes", "test_cp_3_nodes_s"])
 # print(cp_surprise_comparison)
-# #
-# ## RESULT
-# ## with the current default parameters, that allow the model to properly run with a lower number of nodes, the model with 4 nodes performs the best in regards to total surprise of node 0
-# ## using "standard" as the update type prevents the 5 node models from dropping out, they still perform worse than the 4 node model
+#
+## RESULT
+## with the current default parameters, that allow the model to properly run with a lower number of nodes, the model with 4 nodes performs the best in regards to total surprise of node 0
+## using "standard" as the update type prevents the 5 node models from dropping out, they still perform worse than the 4 node model
 
 # ### comparing the surprises of the test models in the random walk environment
-# rw_surprise_comparison = compare_surprise([test_rw_low_p,test_rw_low_p_s,test_rw_high_p, test_rw_high_p_s,test_rw_4_nodes,test_rw_4_nodes_s,test_rw_3_nodes])
-# rw_surprise_comparison["Model"] = ["test_rw_low_p","test_rw_low_p_s","test_rw_high_p","test_rw_high_p_s","test_rw_4_nodes","test_rw_4_nodes_s","test_rw_3node"]
+# rw_surprise_comparison = compare_surprise([test_rw_low_p,test_rw_low_p_s,test_rw_high_p, test_rw_high_p_s,test_rw_4_nodes,test_rw_4_nodes_s,test_rw_3_nodes,test_rw_3_nodes_s],["test_rw_low_p","test_rw_low_p_s","test_rw_high_p","test_rw_high_p_s","test_rw_4_nodes","test_rw_4_nodes_s","test_rw_3node","test_rw_3_nodes_s"])
 # print(rw_surprise_comparison)
 # #
 # ## RESULT
@@ -117,96 +144,88 @@ test_cp_3_nodes = Weber_model(n_nodes=3).input_data(change_point_data["x"].to_nu
 
 # ## comparing the surprise of the 4 node model across environments and update-types
 #
-surprise_comparison_4n = compare_surprise([test_rw_4_nodes,test_rw_4_nodes_s, test_cp_4_nodes,test_cp_4_nodes_s])
-surprise_comparison_4n["Model"]= ["test_rw_4_nodes","test_rw_4_nodes_s", "test_cp_4_nodes","test_cp_4_nodes_s"]
-print(surprise_comparison_4n)
+# surprise_comparison_4n = compare_surprise([test_rw_4_nodes,test_rw_4_nodes_s, test_cp_4_nodes,test_cp_4_nodes_s],["test_rw_4_nodes","test_rw_4_nodes_s", "test_cp_4_nodes","test_cp_4_nodes_s"])
+# print(surprise_comparison_4n)
 #
 # ## RESULT
 # ## Best performance in random walk environment if update-type is "standard" (6538), if using the default one model performs better in Change point environment (seed 42: 6831 vs. 7047)
 
 
-# ### comparing the precision trajectories of node 3
-#
-# rw_precision_comp = compare_trajectories(test_rw_low_p,test_rw_high_p,3,"precision")
-# od_precision_comp = compare_precisions(test_od_low_p,test_od_high_p,3,"precision")
-#
-# rw_precision_comp.to_csv("rw_precision_comp.csv")
-# od_precision_comp.to_csv("od_precision_comp.csv")
-#
-# ## RESULTS
-# ## higher precision of node 4 leads to higher precision of node 3 in the oddball environment
-# ## opposite is true in the random walk environment
+# ## extracting the node trajectories as data frames
 
-    # precision 3 seems to be the sweet spot so far, such that the first 500 trials can be predicted
-    # and are shown in graph (more trials still not working)
-    # -> dicotomy between two environments with random walk environment giving up earlier with
-    # higher preciscion
-    # -> works fine if node 4 is removed
+# # 5 nodes (different precisions)
+# rw_low_p_df = test_rw_low_p.to_pandas()
+# cp_low_p_df = test_cp_low_p.to_pandas()
+# rw_high_p_df = test_rw_high_p.to_pandas()
+# cp_high_p_df = test_cp_high_p.to_pandas()
 
-## extracting the node trajectories as data frames
-#
-# hp_df = test_rw_high_p.to_pandas()
-# hp_df = test_od_high_p.to_pandas()
-# lp_df = test_rw_low_p.to_pandas()
-# lp_df = test_od_low_p.to_pandas()
-#
-# test_rw_3node_df = test_rw_3node.to_pandas()
-# test_od_3node_df = test_od_3node.to_pandas()
-#
-# test_rw_n4_va_lp_df = test_rw_n4_va_lp.to_pandas()
-# test_rw_n4_va_hp_df = test_rw_n4_va_hp.to_pandas()
-# test_od_n4_va_lp_df = test_od_n4_va_lp.to_pandas()
-# test_od_n4_va_hp_df = test_od_n4_va_hp.to_pandas()
+# ## 5 nodes with "standard" as the update type
+# rw_low_p_s_df = test_rw_low_p_s.to_pandas()
+# cp_low_p_s_df = test_cp_low_p_s.to_pandas()
+# rw_high_p_s_df = test_rw_high_p_s.to_pandas()
+# cp_high_p_s_df = test_cp_high_p_s.to_pandas()
+
+# ## 4 nodes
+# rw_4_nodes_df = test_rw_4_nodes.to_pandas()
+# cp_4_nodes_df = test_cp_4_nodes.to_pandas()
+
+# ## 4 nodes with "standard" as the update type
+# rw_4_nodes_s_df = test_rw_4_nodes_s.to_pandas()
+# cp_4_nodes_s_df = test_cp_4_nodes_s.to_pandas()
+
+# ## 3 nodes
+# rw_3_nodes_df = test_rw_3_nodes.to_pandas()
+# cp_3_nodes_df = test_cp_3_nodes.to_pandas()
+
+# ## 3 nodes with "standard" as the update type
+# rw_3_nodes_s_df = test_rw_3_nodes_s.to_pandas()
+# cp_3_nodes_s_df = test_cp_3_nodes_s.to_pandas()
 
 
-### plotting the trajectories of the different model instances
-#
+# ### plotting the trajectories of the different model instances
+# # 5 nodes (different precisions)
 # test_rw_low_p.plot_trajectories()
-# test_od_low_p.plot_trajectories()
+# test_cp_low_p.plot_trajectories()
 # test_rw_high_p.plot_trajectories()
-# test_od_high_p.plot_trajectories()
-# #
-# test_rw_3node.plot_trajectories()
-# test_od_3node.plot_trajectories()
-#
-# test_rw_n4_va_lp.plot_trajectories()
-# test_rw_n4_va_hp.plot_trajectories()
-# test_od_n4_va_lp.plot_trajectories()
-# test_od_n4_va_hp.plot_trajectories()
+# test_cp_high_p.plot_trajectories()
+
+# ## 5 nodes with "standard" as the update type
+# test_rw_low_p_s.plot_trajectories()
+# test_cp_low_p_s.plot_trajectories()
+# test_rw_high_p_s.plot_trajectories()
+# test_cp_high_p_s.plot_trajectories()
+
+# ## 4 nodes
+# test_rw_4_nodes.plot_trajectories()
+# test_cp_4_nodes.plot_trajectories()
+
+# ## 4 nodes with "standard" as the update type
+# test_rw_4_nodes_s.plot_trajectories()
+# test_cp_4_nodes_s.plot_trajectories()
+
+# ## 3 nodes
+# test_rw_3_nodes.plot_trajectories()
+# test_cp_3_nodes.plot_trajectories()
+
+# ## 3 nodes with "standard" as the update type
+# test_rw_3_nodes_s.plot_trajectories()
+# test_cp_3_nodes_s.plot_trajectories()
 
 
-# ## checking the highest jump between observations (before the model cuts off if it does so)
+
+# ## comparing the highest jump between observations the models percieves before dropping out in the different environments and between different precision values for node 4
+## with 5 nodes
+jump_comparison_5_nodes = compare_highest_jump([test_rw_low_p, test_rw_high_p, test_cp_low_p, test_cp_high_p], ["test_rw_low_p", "test_rw_high_p", "test_cp_low_p", "test_cp_high_p"])
+print(jump_comparison_5_nodes)
 #
-# print("Highest jumps in low precision condition: ")
-# print(" - Random Walk environment: " + str(test_rw_low_p.largest_jump()))
-# print(" - Oddball environment: " + str(test_od_low_p.largest_jump())+ "\n")
-#
-# print("Highest jumps in high precision condition:")
-# print(" - Random Walk environment: " + str(test_rw_high_p.largest_jump()))
-# print(" - Oddball environment: " + str(test_od_high_p.largest_jump())+ "\n")
-#
-## without node 4
-# print("Highest jumps without node 4: ")
-# print(" - Random Walk environment: " + str(test_rw_3node.largest_jump()))
-# print(" - Oddball environment: " + str(test_od_3node.largest_jump())+ "\n")
+## with 4 nodes
+jump_comparison_4_nodes = compare_highest_jump([test_rw_4_nodes, test_cp_4_nodes],["test_rw_4_nodes", "test_cp_4_nodes"])
+print(jump_comparison_4_nodes)
 #
 # # RESULT
 # # high precision of node 4 leads the model to drop out at a smaller jump (/earlier) in the randomwalk environment (as compared to lower precision of node 4)
 # # while high precision of node 4 leads the model to persevere after a overall larger jump in the oddball environment
-#
-#
-# doing the same with node 4 as a value parent
-# print("Highest jumps with node 4 as a value parent (random walk environment): ")
-# print(" - Low precision: " + str(test_rw_n4_va_lp.largest_jump()))
-# print(" - High precision: " + str(test_rw_n4_va_hp.largest_jump())+ "\n")
-#
-# print("Highest jumps with node 4 as a value parent (changepoint environment): ")
-# print(" - Low precision: " + str(test_od_n4_va_lp.largest_jump()))
-# print(" - High precision: " + str(test_od_n4_va_hp.largest_jump())+ "\n")
-#
-## RESULT:
-# highest jump for the high precision rw model is said to be at observation 216 -> does not count the one that actually does it in
-# -> oddball at 503 kills the model
+
 
 
 ## checking weird surprise spike in rw_3node
@@ -279,6 +298,7 @@ print(surprise_comparison_4n)
 # diffs_overview = pd.DataFrame({"CP diffs": cp_diffs, "RW diffs": rw_diffs})
 # diffs_overview.to_csv("diffs_overview.csv")
 
+#------------------------------------------OUTDATED----------------------------------------------------#
 
 ## OUTDATED as result was bad with Node 4 as a value parent
 #
@@ -287,3 +307,64 @@ print(surprise_comparison_4n)
 #
 # test_od_n4_va_lp = Weber_model(oddball_data,node_4_type= "value_parent") #model  fit to random walk environment with node 4 as a value parent with comparatively low precision
 # test_od_n4_va_hp = Weber_model(oddball_data,node_4_type= "value_parent", n4_p= 1e1) #model  fit to random walk environment with node 4 as a value parent with comparatively high precision
+#
+# comparing highest jumps with node 4 as a value parent
+# print("Highest jumps with node 4 as a value parent (random walk environment): ")
+# print(" - Low precision: " + str(test_rw_n4_va_lp.largest_jump()))
+# print(" - High precision: " + str(test_rw_n4_va_hp.largest_jump())+ "\n")
+#
+# print("Highest jumps with node 4 as a value parent (changepoint environment): ")
+# print(" - Low precision: " + str(test_od_n4_va_lp.largest_jump()))
+# print(" - High precision: " + str(test_od_n4_va_hp.largest_jump())+ "\n")
+#
+## RESULT:
+# highest jump for the high precision rw model is said to be at observation 216 -> does not count the one that actually does it in
+# -> oddball at 503 kills the model
+
+# ### comparing the precision trajectories of node 3
+#
+# rw_precision_comp = compare_trajectories(test_rw_low_p,test_rw_high_p,3,"precision")
+# od_precision_comp = compare_precisions(test_od_low_p,test_od_high_p,3,"precision")
+#
+# rw_precision_comp.to_csv("rw_precision_comp.csv")
+# od_precision_comp.to_csv("od_precision_comp.csv")
+#
+# ## RESULTS
+# ## higher precision of node 4 leads to higher precision of node 3 in the oddball environment
+# ## opposite is true in the random walk environment
+
+    # precision 3 seems to be the sweet spot so far, such that the first 500 trials can be predicted
+    # and are shown in graph (more trials still not working)
+    # -> dicotomy between two environments with random walk environment giving up earlier with
+    # higher preciscion
+    # -> works fine if node 4 is removed
+
+## copy template
+
+## 5 nodes (different precisions)
+# test_rw_low_p
+# test_cp_low_p
+# test_rw_high_p
+# test_cp_high_p
+
+# ## 5 nodes with "standard" as the update type
+# test_rw_low_p_s
+# test_cp_low_p_s
+# test_rw_high_p_s
+# test_cp_high_p_s
+
+# ## 4 nodes
+# test_rw_4_nodes
+# test_cp_4_nodes
+
+# ## 4 nodes with "standard" as the update type
+# test_rw_4_nodes_s
+# test_cp_4_nodes_s
+
+# ## 3 nodes
+# test_rw_3_nodes
+# test_cp_3_nodes
+
+# ## 3 nodes with "standard" as the update type
+# test_rw_3_nodes_s
+# test_cp_3_nodes_s
