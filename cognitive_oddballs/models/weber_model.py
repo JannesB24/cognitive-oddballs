@@ -6,7 +6,9 @@ from cognitive_oddballs.models.model import Model
 
 
 class WeberModel(Network, Model):
-    def __init__(self, n_nodes=4, x_0_tv=5, x_2_mu=15, x_3_mu = 40, x_4_p=1e1, update_type="eHGF"): #paramteres to maybe add: node precisions, tonic volatilities, initial means for node 3 and 4 (if 4 is kept)
+    def __init__(
+        self, n_nodes=4, x_0_tv=5, x_2_mu=15, x_3_mu=40, x_4_p=1e1, update_type="standard"
+    ):  # paramteres to maybe add: node precisions, tonic volatilities, initial means for node 3 and 4 (if 4 is kept)
         """A subclass of the pyhfg Network class.
         Each Instance is a set network of 3 to 5 Nodes (4th and 5th node can be left out for
         experimental purposes):
@@ -28,25 +30,28 @@ class WeberModel(Network, Model):
 
 
         """
-        #if n_nodes is not in specified range, a value error is raised
-        if n_nodes <3 or n_nodes >5:
+        # if n_nodes is not in specified range, a value error is raised
+        if n_nodes < 3 or n_nodes > 5:
             raise ValueError("n_nodes must be between 3 and 5 (inclusive)")
 
         # passing the update type to the Init function of the Network class
         super().__init__(update_type=update_type)
         # Node 0: Observation node/ Continuous input node
-        self.add_nodes(mean=250, tonic_volatility=x_0_tv, autoconnection_strength=0) # initial mean set at 250, as that is always the middle of the possible environmental values
+        self.add_nodes(
+            mean=250, tonic_volatility=x_0_tv, autoconnection_strength=0
+        )  # initial mean set at 250, as that is always the middle of the possible environmental values
         # Node 1: Value parent of Node 0
-        self.add_nodes(mean=250, value_children=0)  # initial mean set at 250, as that is always the middle of the possible environmental values
+        self.add_nodes(
+            mean=250, value_children=0
+        )  # initial mean set at 250, as that is always the middle of the possible environmental values
         # Node 2: Volatility parent of node 1
-        self.add_nodes(mean=x_2_mu,volatility_children=1)
+        self.add_nodes(mean=x_2_mu, volatility_children=1)
         # if given number of nodes is at least 4, more nodes are added
-        if n_nodes >=4:
-            self.add_nodes(mean=x_3_mu,volatility_children=0)
+        if n_nodes >= 4:
+            self.add_nodes(mean=x_3_mu, volatility_children=0)
             # if number of nodes is 5 one more node is added
-            if n_nodes ==5:
+            if n_nodes == 5:
                 self.add_nodes(volatility_children=3, precision=x_4_p)
-
 
     def run(self, observations: np.ndarray) -> pd.DataFrame:
         self.input_data(observations)
@@ -62,15 +67,14 @@ class WeberModel(Network, Model):
         output = super().to_pandas()
         output["x_0_prediction_error"] = output["x_0_mean"] - output["x_0_expected_mean"]
         return output
-    
 
     # functions used in testing
     def drops_out(self) -> bool:
         """Checks whether the Model drops out at any point and returns the corresponding bool"""
         trajectories = self.to_pandas()
 
-        return (np.count_nonzero(np.isnan(trajectories)) > 0)
-    
+        return np.count_nonzero(np.isnan(trajectories)) > 0
+
     def value_prediction_errors(self):
         """Returns the prediction error of Node 0 for each observation"""
         return self.to_pandas()["x_0_prediction_error"]
@@ -109,31 +113,3 @@ class WeberModel(Network, Model):
                 at = i
             i = i + 1
         return max_total_surprise, at
-    
-#### outdated functions (can potentially be removed)
-
-    # both fitting functions redundant, as input_data() from parent class can be used
-
-    # # both fitting functions currently the same, but should maybe stay separate for usability
-    # def fit_to_change_point_oddball_environment(self, df):
-    #     """Fitting the gHGF to a given dataset, produced in a change-point oddball environment"""
-
-    #     input = df["x"].to_numpy()
-    #     self.input_data(input)
-
-    # def fit_to_random_walk_oddball_environment(self, df):
-    #     """Fits the gHGF onto data generated in a random walk oddball environment"""
-    #     input = df["x"].to_numpy()
-    #     self.input_data(input)
-
-    # replaced by run()
-    def get_outputs(self):
-        trajectories = self.to_pandas()
-        outputs = {"prediction_errors": trajectories["x_0_prediction_error"], "updates": []}
-        # not sure for the last one, which index to use. I don't know if a new prediction is
-        # made before a new input would be given, so for now it simply appends the last known
-        # prediction even tho it pertains to the last observation
-        for i in range(len(trajectories) - 1):
-            outputs["updates"].append(trajectories.loc[i + 1, "x_0_expected_mean"])
-        outputs["updates"].append(trajectories.loc[len(trajectories), "x_0_expected_mean"])
-        return outputs

@@ -17,5 +17,9 @@ class Model(ABC):
 
         Returns:
             pd.DataFrame: Relevant model outputs as a pandas DataFrame.
+
+            The first line corresponds to the initial belief before seeing any observation,
+            therefore the entry at index 1 in "beliefs" corresponds to the belief after seeing
+            the first observation.
         """
         pass

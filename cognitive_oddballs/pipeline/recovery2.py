@@ -473,31 +473,46 @@ def grid_search_map(model_cls, param_grid, observations, responses, sigma_r):
 
 
 def estimate_hessian(model_cls, map_params, observations, responses, sigma_r, eps=1e-4):
+    # --- move MAP to unconstrained space ---
+    theta_u_map = np.log(map_params)
+
     k = len(map_params)
     hessian = np.zeros((k, k))
 
-    def neg_log_post(params):
+    def neg_log_post_unconstrained(theta_u):
+        # back to constrained space
+        params = np.exp(theta_u)
+
         model = make_model(model_cls, params, observations)
-        model = make_model(model_cls, params, observations)
+
         outputs = run_model_on_environment(
-            model, observations, sigma_r, generate_responses=False, fixed_responses=responses
+            model,
+            observations,
+            sigma_r,
+            generate_responses=False,
+            fixed_responses=responses,
         )
+
         ll = response_log_likelihood(responses, outputs["beliefs"], sigma_r)
-        return -(ll + safe_log_prior(model, params))
+
+        if not np.isfinite(ll):
+            return np.inf
+
         return -(ll + safe_log_prior(model, params))
 
+    # --- finite differences in unconstrained space ---
     for i in range(k):
         for j in range(k):
             ei = np.zeros(k)
-            ei[i] = eps
             ej = np.zeros(k)
+            ei[i] = eps
             ej[j] = eps
 
             hessian[i, j] = (
-                neg_log_post(map_params + ei + ej)
-                - neg_log_post(map_params + ei - ej)
-                - neg_log_post(map_params - ei + ej)
-                + neg_log_post(map_params - ei - ej)
+                neg_log_post_unconstrained(theta_u_map + ei + ej)
+                - neg_log_post_unconstrained(theta_u_map + ei - ej)
+                - neg_log_post_unconstrained(theta_u_map - ei + ej)
+                + neg_log_post_unconstrained(theta_u_map - ei - ej)
             ) / (4 * eps**2)
 
     return hessian
@@ -1012,12 +1027,12 @@ if __name__ == "__main__":
     }
 
     winners, param_recovery = run_many_simulations(
-        n_sims=200,
+        n_sims=5,
         models=models,
         true_param_sampler=true_param_sampler,
         param_grids=param_grids,
         environment_fn=generate_change_point_environment,
-        n_trials=300,
+        n_trials=200,
         sigma_r=5.0,
         decision_rule="BIC",  # robust choice
     )
