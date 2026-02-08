@@ -932,7 +932,7 @@ def run_many_simulations(
     winners = {tm: dict.fromkeys(model_names, 0) for tm in model_names}
     param_recovery = {m: [] for m in model_names}
 
-    for sim in range(n_sims):
+    for _sim in range(n_sims):
         true_params = {m: true_param_sampler(m) for m in model_names}
 
         results = model_recovery_per_env(
