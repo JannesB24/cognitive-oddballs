@@ -29,6 +29,7 @@ Evaluation Metrics:
 # QUESTIONS:
 # Is the Faulcault stuff still relevant?
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 
@@ -39,10 +40,8 @@ import pandas as pd
 from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
 from cognitive_oddballs.models.change_point_model_variational import ChangePointModelVariational
-from cognitive_oddballs.models.change_point_nassar_2016 import ChangePointNassarModel
 from cognitive_oddballs.models.hgf.hgf2_gaussian import HGFPaper2Gaussian
 from cognitive_oddballs.models.model import Model
-from cognitive_oddballs.models.weber_model import WeberModel
 
 # Paths
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -110,7 +109,7 @@ def run_experiment(
     environment_fn: Callable,
     models: dict[str, Model],
     n_trials: int,
-    response_noise_std: float = 5.0,
+    response_noise_std: float = 1.0,
     n_simulations: int = 1,  # Default to 1 simulation if not specified
 ) -> dict:
     """
@@ -124,7 +123,7 @@ def run_experiment(
 
         for _ in range(n_simulations):
             # Generate a new environment for each simulation
-            environment = environment_fn(n_trials=n_trials, oddball_hazard_rate=0.0)
+            environment = environment_fn(n_trials=n_trials, oddball_hazard_rate=0.1, seed=None)
 
             response_model = GaussianResponseModel(response_noise_std)
             outputs = run_model_on_environment(model, response_model, environment)
@@ -133,13 +132,13 @@ def run_experiment(
             # seeing observation at timestep t
             total_rmse = rmse(outputs["beliefs"].to_numpy()[1:], environment["x"].to_numpy())
 
-            total_surprise = np.sum(outputs["variational_free_energy"]) * -1
+            total_free_energy = np.sum(outputs["variational_free_energy"])
 
             model_sim_result = {
                 "environment": environment,
                 "model_outputs": outputs,
                 "rmse": total_rmse,
-                "surprise": total_surprise,
+                "free_energy": total_free_energy,
             }
 
             model_sim_results.append(model_sim_result)
@@ -155,7 +154,7 @@ def run_experiment(
 # mu0 = 250, ln_sigma0 = -5, ln_s = 0.1, ln_w1 = 0.01, ln_w2 = 8.0, ln_h_div_1_h= -3.0,
 
 
-def experiment_changepoint():
+def experiment_changepoint(n_trials: int, n_simulations: int):
     models: dict[str, Model] = {
         "CPM": ChangePointModelVariational(
             mu0=250, sigma0=50, obs_noise_std=25, w1_std=0.1, w2_std=30, h=0.1
@@ -169,14 +168,14 @@ def experiment_changepoint():
         #     h=1 / (1 + np.exp(-3.0)),
         # ),
         "HGF": HGFPaper2Gaussian(eta=0.005, s=15.0, mu1_init=250.0),
-        "gHGF": WeberModel(node4=True, node_4_type="volatility_parent", n4_p=3.0),
+        # "gHGF": WeberModel(node4=True, node_4_type="volatility_parent", n4_p=3.0),
     }
 
     return run_experiment(
         environment_fn=generate_change_point_environment,
         models=models,
-        n_trials=100,
-        n_simulations=1,
+        n_trials=n_trials,
+        n_simulations=n_simulations,
     )
 
 
@@ -184,75 +183,154 @@ def experiment_changepoint():
 # Random-walk oddball
 
 
-def experiment_randomwalk():
-    models = {
-        "OG": ChangePointNassarModel(x=[250], sigma_sequence=[25]),
+def experiment_randomwalk(n_trials: int, n_simulations: int):
+    models: dict[str, Model] = {
         "CPM": ChangePointModelVariational(
-            mu0=250,  # Start at center
-            sigma0=25,
-            obs_noise_std=25,
-            w1_std=3.16,  # Higher drift for random walk
-            w2_std=30,  # Does not matter for RW
-            h=0.1,
-            add_second_level=True,
+            mu0=250, sigma0=50, obs_noise_std=25, w1_std=0.1, w2_std=30, h=0.1
         ),
-        "gHGF": WeberModel(node4=True, node_4_type="volatility_parent", n4_p=3.0),
-        "HGF": HGFPaper2Gaussian(
-            eta=0.005, s=15.0**2, mu1_init=0.0, sig1_init=10.0, mu2_init=-4.0, sig2_init=1.0
-        ),
+        # "CPM": ChangePointModelVariational(
+        #     mu0=250,
+        #     sigma0=np.exp(-5),
+        #     obs_noise_std=np.exp(0.1),
+        #     w1_std=np.exp(0.01),
+        #     w2_std=np.exp(8.0),
+        #     h=1 / (1 + np.exp(-3.0)),
+        # ),
+        "HGF": HGFPaper2Gaussian(eta=0.005, s=15.0, mu1_init=250.0),
+        # "gHGF": WeberModel(node4=True, node_4_type="volatility_parent", n4_p=3.0),
     }
 
     return run_experiment(
         environment_fn=generate_random_walk_environment,
         models=models,
-        n_trials=1000,
-        n_simulations=10,
+        n_trials=n_trials,
+        n_simulations=n_simulations,
     )
 
 
-# Plotting
+# Visualization
 
 
-def plot_learning_rate_vs_error(results: dict, title: str):
+def create_comparison_boxplot(results_dict: dict, save_path: Path | None = None):
     """
-    Replicates Nassar / Foucault style plots:
-    learning rate as a function of |prediction error|
+    Create a two-panel boxplot comparing CPM and HGF across environments.
+
+    Args:
+        results_dict: Dict with structure:
+            {
+                'switching': {'CPM': [...], 'HGF': [...]},
+                'diffusive': {'CPM': [...], 'HGF': [...]}
+            }
+            where each list contains simulation results with 'rmse' and 'free_energy' keys
+        save_path: Optional path to save the figure
     """
-    plt.figure(figsize=(6, 5))
+    from matplotlib.patches import Patch
 
-    for model_name, metrics in results.items():
-        pe = np.abs(metrics["prediction_errors"])
-        lr = metrics["learning_rate"]
+    environments = ["switching", "diffusive"]
+    models = ["CPM", "HGF"]
+    colors = {"CPM": "#D4A574", "HGF": "#9B79B5"}
 
-        plt.scatter(pe, lr, s=10, alpha=0.4, label=model_name)
+    # Extract metrics from results
+    def extract_metric(metric_name):
+        return {
+            env: {
+                model: [sim[metric_name] for sim in results_dict[env].get(model, [])]
+                for model in models
+            }
+            for env in environments
+        }
 
-    plt.xlabel("|Prediction error|")
-    plt.ylabel("Apparent learning rate")
-    plt.title(title)
-    plt.legend()
+    rmse_data = extract_metric("rmse")
+    free_energy_data = extract_metric("free_energy")
+
+    # Create figure
+    fig, (ax_rmse, ax_fe) = plt.subplots(1, 2, figsize=(12, 5))
+    ax_rmse.text(-0.1, 1.05, "A", transform=ax_rmse.transAxes, fontsize=16, fontweight="bold")
+    ax_fe.text(-0.1, 1.05, "B", transform=ax_fe.transAxes, fontsize=16, fontweight="bold")
+
+    # Common boxplot parameters
+    box_props = {"patch_artist": True, "widths": 0.6}
+
+    # Helper function to plot data on axis
+    def plot_metric(ax, data, ylabel):
+        positions = []
+        for env_idx, env in enumerate(environments):
+            base_pos = env_idx * 3  # Space between environment groups
+            for model_idx, model in enumerate(models):
+                if data[env][model]:
+                    pos = base_pos + model_idx * 0.8
+                    positions.append(pos)
+                    bp = ax.boxplot(
+                        [data[env][model]],
+                        positions=[pos],
+                        boxprops={"facecolor": colors[model], "alpha": 0.7},
+                        medianprops={"color": "black", "linewidth": 1.5},
+                        flierprops={
+                            "marker": "D",
+                            "markerfacecolor": colors[model],
+                            "markersize": 4,
+                            "alpha": 0.5,
+                        },
+                        **box_props,
+                    )
+
+        # Set labels and grid
+        env_centers = [i * 3 + 0.4 for i in range(len(environments))]
+        ax.set_xticks(env_centers)
+        ax.set_xticklabels(environments)
+        ax.set_ylabel(ylabel, fontsize=12)
+        ax.grid(axis="y", alpha=0.3, linestyle="--")
+
+    plot_metric(ax_rmse, rmse_data, "RMSE")
+    plot_metric(ax_fe, free_energy_data, "free-energy")
+
+    # Add legend to first subplot
+    legend_elements = [
+        Patch(facecolor=colors[m], alpha=0.7, edgecolor="black", label=m) for m in models
+    ]
+    ax_rmse.legend(
+        handles=legend_elements,
+        loc="upper left",
+        frameon=True,
+        fontsize=11,
+    )
+
     plt.tight_layout()
-    plt.show()
 
-    plt.savefig(FIGURES_DIR / f"learning_rate_vs_error_{title.replace(' ', '_')}.png")
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Figure saved to: {save_path}")
+
+    plt.show()
+    return fig
 
 
 # Main
 
-
 if __name__ == "__main__":
-    set_seed(42)
+    n_trials = 100
+    n_simulations = 100
+    results_cp = experiment_changepoint(n_trials=n_trials, n_simulations=n_simulations)
+    results_rw = experiment_randomwalk(n_trials=n_trials, n_simulations=n_simulations)
 
-    results_cp = experiment_changepoint()
-    # results_rw = experiment_randomwalk()
+    # Organize results for visualization
+    results_dict = {
+        "switching": {},
+        "diffusive": {},
+    }
 
-    plot_learning_rate_vs_error(results_cp, "Changepoint oddball environment")
+    # Extract CPM and HGF from changepoint (switching)
+    for model_name in ["CPM", "HGF"]:
+        if model_name in results_cp:
+            results_dict["switching"][model_name] = results_cp[model_name]
 
-    # plot_learning_rate_vs_error(results_rw, "Random-walk oddball environment")
+    # Extract CPM and HGF from randomwalk (diffusive)
+    for model_name in ["CPM", "HGF"]:
+        if model_name in results_rw:
+            results_dict["diffusive"][model_name] = results_rw[model_name]
 
+    with (RESULTS_DIR / "results.json").open("w") as f:
+        json.dump(results_dict, f, indent=2, default=str)
 
-# beliefs (Nassar: Belief; Weber: x_0_expected_mean)
-# observations/targets (location bag drops: Nassar: BagDrop; Weber: x_0_mean; for all models, depends on environment)
-# responses (are computed in eval)
-# prediction_errors (Nassar: PredictionError, Weber: x_0_prediction_error)
-# updates (new belief; Nassar: Belief of t+1; Weber: x_0_expected_mean of t+1)
-# log_likelihood (computed in eval)
+    # Create visualization
+    create_comparison_boxplot(results_dict, save_path=FIGURES_DIR / "model_comparison.png")
