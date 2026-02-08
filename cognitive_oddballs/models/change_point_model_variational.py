@@ -55,9 +55,9 @@ class ChangePointModelVariational(Model):
         0 ≤ w1_std ≤ 10 for typical continuous drift. 
         For change-point environments: 0 or very small (ie. 0.1) for minimal drift.
         Note: Squared internally to get variance w₁
-    w2 : float
+    w2_std : float
         Change-point jump STANDARD DEVIATION (√w₂)
-        130 <= w2 <= 125000 for an environment with an observation range of 0-500.
+        12 <= w2 <= 350 for an environment with an observation range of 0-500.
         Note: Squared internally to get variance w₂
     h : float
         Hazard rate - prior probability of change-point (h)
