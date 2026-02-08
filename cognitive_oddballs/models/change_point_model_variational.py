@@ -46,13 +46,13 @@ class ChangePointModelVariational(Model):
         0 <= mu0 <= 500 (ideally the centre as the starting position)
     sigma0 : float
         Initial uncertainty (σ₀¹)
-        0 < sigma0 <= 100 
+        0 < sigma0 <= 100
     obs_noise : float
         Observation noise STANDARD DEVIATION (s)
         obs_noise > 0  (matched to the environment noise)
     w1_std : float
         Stability drift STANDARD DEVIATION (√w₁)
-        0 ≤ w1_std ≤ 10 for typical continuous drift. 
+        0 ≤ w1_std ≤ 10 for typical continuous drift.
         For change-point environments: 0 or very small (ie. 0.1) for minimal drift.
         Note: Squared internally to get variance w₁
     w2_std : float
@@ -99,9 +99,9 @@ class ChangePointModelVariational(Model):
         self,
         mu0: float,
         sigma0: float,
-        obs_noise_std: float, #std dev
-        w1_std: float, #std dev
-        w2_std: float, #std dev
+        obs_noise_std: float,  # std dev
+        w1_std: float,  # std dev
+        w2_std: float,  # std dev
         h: float,
         add_second_level: bool = True,
     ) -> None:
@@ -117,15 +117,15 @@ class ChangePointModelVariational(Model):
         self.w2_std = w2_std  # w₂ - Change-point variance (std dev)
 
         # VARIANCE CONVERSION FOR INTERNAL USE
-        self.obs_noise_var = obs_noise_std ** 2
-        self.w1_var = w1_std ** 2
-        self.w2_var = w2_std ** 2
+        self.obs_noise_var = obs_noise_std**2
+        self.w1_var = w1_std**2
+        self.w2_var = w2_std**2
 
-        # First-level latent states 
+        # First-level latent states
         self.mu = mu0  # μ^(1) - Posterior expectation
         self.sigma = sigma0  # σ^(1) - Posterior STANDARD DEVIATION
 
-        # Second-level states (for HGF comparability) 
+        # Second-level states (for HGF comparability)
         self.add_second_level = add_second_level
         if add_second_level:
             self.mu2 = 0.0  # μ^(2) - Volatility (log-odds of Ω)
@@ -245,8 +245,7 @@ class ChangePointModelVariational(Model):
         denominator = numerator + (1 - self.hazard_rate) * like_stability
 
         # NaN PREVENTION (in case of zero division)
-        if denominator < 1e-300:
-            denominator = 1e-300
+        denominator = np.maximum(denominator, 1e-10)
 
         omega = numerator / denominator
         return np.clip(omega, 1e-6, 1 - 1e-6)
@@ -539,9 +538,9 @@ if __name__ == "__main__":
         x=df_change_point["x"].values,
         mu0=df_change_point["x"].iloc[0],
         sigma0=25,
-        obs_noise_std=25,    
-        w1_std=0.1,        # std dev (squares to 0.01 in variance)
-        w2_std=30,         # std dev (squares to 900 in variance)
+        obs_noise_std=25,
+        w1_std=0.1,  # std dev (squares to 0.01 in variance)
+        w2_std=30,  # std dev (squares to 900 in variance)
         h=0.1,
         add_second_level=True,
     )
@@ -583,9 +582,9 @@ if __name__ == "__main__":
     cpm_model_walk = ChangePointModelVariational(
         mu0=df_random_walk["x"].iloc[0],
         sigma0=25,
-        obs_noise_std=25,    
-        w1_std=3.16,       # std dev (squares to 10 drift steps in variance)
-        w2_std=30,         # (of no significance in random walk environment) std dev (squared to 900 in variance)
+        obs_noise_std=25,
+        w1_std=3.16,  # std dev (squares to 10 drift steps in variance)
+        w2_std=30,  # (of no significance in random walk environment) std dev (squared to 900 in variance)
         h=0.1,
         add_second_level=True,
     )
