@@ -42,6 +42,7 @@ from cognitive_oddballs.environments.random_walk_oddball import generate_random_
 from cognitive_oddballs.models.change_point_model_variational import ChangePointModelVariational
 from cognitive_oddballs.models.hgf.hgf2_gaussian import HGFPaper2Gaussian
 from cognitive_oddballs.models.model import Model
+from cognitive_oddballs.models.weber_model import WeberModel
 
 # Paths
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -168,7 +169,7 @@ def experiment_changepoint(n_trials: int, n_simulations: int):
         #     h=1 / (1 + np.exp(-3.0)),
         # ),
         "HGF": HGFPaper2Gaussian(eta=0.005, s=15.0, mu1_init=250.0),
-        # "gHGF": WeberModel(node4=True, node_4_type="volatility_parent", n4_p=3.0),
+        "gHGF": WeberModel(),
     }
 
     return run_experiment(
@@ -197,7 +198,7 @@ def experiment_randomwalk(n_trials: int, n_simulations: int):
         #     h=1 / (1 + np.exp(-3.0)),
         # ),
         "HGF": HGFPaper2Gaussian(eta=0.005, s=15.0, mu1_init=250.0),
-        # "gHGF": WeberModel(node4=True, node_4_type="volatility_parent", n4_p=3.0),
+        "gHGF": WeberModel(),
     }
 
     return run_experiment(
