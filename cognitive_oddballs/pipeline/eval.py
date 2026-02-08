@@ -157,9 +157,9 @@ def run_experiment(
 
 def experiment_changepoint(n_trials: int, n_simulations: int):
     models: dict[str, Model] = {
-        "CPM": ChangePointModelVariational(
-            mu0=250, sigma0=50, obs_noise_std=25, w1_std=0.1, w2_std=30, h=0.1
-        ),
+        # "CPM": ChangePointModelVariational(
+        #     mu0=250, sigma0=50, obs_noise_std=25, w1_std=0.1, w2_std=30, h=0.1
+        # ),
         # "CPM": ChangePointModelVariational(
         #     mu0=250,
         #     sigma0=np.exp(-5),
@@ -310,7 +310,7 @@ def create_comparison_boxplot(results_dict: dict, save_path: Path | None = None)
 
 if __name__ == "__main__":
     n_trials = 100
-    n_simulations = 100
+    n_simulations = 1
     results_cp = experiment_changepoint(n_trials=n_trials, n_simulations=n_simulations)
     results_rw = experiment_randomwalk(n_trials=n_trials, n_simulations=n_simulations)
 

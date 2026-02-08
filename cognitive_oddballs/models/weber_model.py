@@ -56,16 +56,18 @@ class WeberModel(Network, Model):
     def run(self, observations: np.ndarray) -> pd.DataFrame:
         self.input_data(observations)
 
-        output = self.to_pandas()[["x_0_expected_mean"]]
+        output = self.to_pandas()[
+            ["x_0_expected_mean", "x_0_prediction_error", "learning_rate", "vfe"]
+        ]
 
-        rename_dict = {"x_0_expected_mean": "raw_responses"}
+        rename_dict = {"x_0_expected_mean": "beliefs"}
 
         return output.rename(columns=rename_dict)
 
     def to_pandas(self):
         """Returns the trajectories of the nodes. Extended with the prediction error of node 0"""
         output = super().to_pandas()
-        output["x_0_prediction_error"] = output["x_0_mean"] - output["x_0_expected_mean"]
+        output["x_0_prediction_error"] = output["x_0_mean"] - output["x_0_observed"]
         return output
 
     # functions used in testing
