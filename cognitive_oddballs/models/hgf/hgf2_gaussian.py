@@ -65,7 +65,7 @@ class HGFPaper2Gaussian(Model):
         mu2_init: float = 0.0,
         sig2_init: float = 1.0,
         min_var: float = 1e-8,
-        exp_clip_value: float = 60.0,
+        exp_clip_value: float = 30.0,
     ):
         self.cfg = HGF2Config(
             mu1_0=float(mu1_init),
@@ -113,7 +113,6 @@ class HGFPaper2Gaussian(Model):
 
         mu1_prev = self.mu1
         sig1_prev = self.sig1
-        # denominator helper
         den1 = max(sig1_prev + omega, minvar)
 
         # ----------- Update -------------------
@@ -140,9 +139,16 @@ class HGFPaper2Gaussian(Model):
         # precision
         pi2 = (1.0 / sig2_prev) + 0.5 * k * (k + r * delta2)
 
-        # posterior update
-        sig2_new = 1.0 / max(pi2, minvar)
-        mu2_new = mu2_prev + 0.5 * max(sig2_new, minvar) * k * delta2
+        # ---- clamps (NUMERICAL STABILITY) ----
+        min_pi2 = 1e-6  # floor on precision (avoids huge sig2)
+        max_sig2 = 1e2  # cap on variance (avoids huge updates)
+
+        pi2 = max(pi2, min_pi2)  # clamp on precision
+        sig2_new = 1.0 / pi2
+        sig2_new = min(sig2_new, max_sig2)  # clamp on variance
+        # -------------------------------------
+
+        mu2_new = mu2_prev + 0.5 * sig2_new * k * delta2
 
         # state update of the model
         self.mu1, self.mu2 = mu1_new, mu2_new
@@ -371,7 +377,7 @@ def simulate_paper_environment(
     x2_baseline: float = -4.0,
     burst_every: int = 100,
     burst_len: int = 8.0,
-    burst_add: float = 0.9,
+    burst_add: float = 0.7,
     seed: int = 42,
 ):
     rng = np.random.default_rng(seed)
@@ -399,12 +405,14 @@ def _demo_paper_hgf2():
     o, x1_true, x2_true = simulate_paper_environment()
 
     model = HGFPaper2Gaussian(
-        eta=0.005,
-        s=15.0**2,
+        eta=0.02,
+        s=225.0,
         mu1_init=0.0,
-        sig1_init=10.0,
-        mu2_init=-4.0,  # vicino a x2_baseline
-        sig2_init=1.0,
+        sig1_init=25.0,
+        mu2_init=-4.0,
+        sig2_init=1.5,
+        min_var=1e-8,
+        exp_clip_value=30.0,
     )
     model.run(o)
     model.plot_results(true_x1=x1_true, true_x2=x2_true)
