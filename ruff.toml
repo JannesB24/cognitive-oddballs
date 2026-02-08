@@ -1,6 +1,9 @@
 # Ruff configuration file
 # https://docs.astral.sh/ruff/
 
+# Exclude files from linting
+exclude = ["testing.py"]
+
 # Target Python version
 target-version = "py312"
 
