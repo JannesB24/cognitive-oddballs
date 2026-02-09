@@ -30,6 +30,8 @@ class WeberModel(Network, Model):
 
 
         """
+        self.inital_means = [250, 250, x_2_mu, x_3_mu]
+
         # if n_nodes is not in specified range, a value error is raised
         if n_nodes < 3 or n_nodes > 5:
             raise ValueError("n_nodes must be between 3 and 5 (inclusive)")
@@ -38,17 +40,17 @@ class WeberModel(Network, Model):
         super().__init__(update_type=update_type)
         # Node 0: Observation node/ Continuous input node
         self.add_nodes(
-            mean=250, tonic_volatility=x_0_tv, autoconnection_strength=0
+            mean=self.inital_means[0], tonic_volatility=x_0_tv, autoconnection_strength=0
         )  # initial mean set at 250, as that is always the middle of the possible environmental values
         # Node 1: Value parent of Node 0
         self.add_nodes(
-            mean=250, value_children=0
+            mean=self.inital_means[1], value_children=0
         )  # initial mean set at 250, as that is always the middle of the possible environmental values
         # Node 2: Volatility parent of node 1
-        self.add_nodes(mean=x_2_mu, volatility_children=1)
+        self.add_nodes(mean=self.inital_means[2], volatility_children=1)
         # if given number of nodes is at least 4, more nodes are added
         if n_nodes >= 4:
-            self.add_nodes(mean=x_3_mu, volatility_children=0)
+            self.add_nodes(mean=self.inital_means[3], volatility_children=0)
             # if number of nodes is 5 one more node is added
             if n_nodes == 5:
                 self.add_nodes(volatility_children=3, precision=x_4_p)
@@ -56,18 +58,39 @@ class WeberModel(Network, Model):
     def run(self, observations: np.ndarray) -> pd.DataFrame:
         self.input_data(observations)
 
-        output = self.to_pandas()[
-            ["x_0_expected_mean", "x_0_prediction_error", "learning_rate", "vfe"]
+        cols = [
+            "x_0_expected_mean",
+            "x_0_prediction_error",
+            "total_surprise",
         ]
 
-        rename_dict = {"x_0_expected_mean": "beliefs"}
+        output = self.to_pandas()[cols]
+
+        inital_row = pd.DataFrame(
+            {
+                "x_0_expected_mean": self.inital_means[0],
+                "x_0_prediction_error": 0.0,
+                "x_0_surprise": 0.0,
+            },
+            index=[0],
+        )
+
+        output = pd.concat([inital_row, output], ignore_index=True)
+
+        output["total_free_energy"] = -output["x_0_surprise"]
+
+        rename_dict = {
+            "x_0_expected_mean": "beliefs",
+            "x_0_prediction_error": "prediction_error",
+            "total_free_energy": "variational_free_energy",
+        }
 
         return output.rename(columns=rename_dict)
 
     def to_pandas(self):
         """Returns the trajectories of the nodes. Extended with the prediction error of node 0"""
         output = super().to_pandas()
-        output["x_0_prediction_error"] = output["x_0_mean"] - output["x_0_observed"]
+        output["x_0_prediction_error"] = output["x_0_mean"] - output["x_0_expected_mean"]
         return output
 
     # functions used in testing
