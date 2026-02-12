@@ -84,13 +84,8 @@ def generate_random_walk_environment(
         # Oddball decision: bag from random location or helicopter location?
         if np.random.rand() < oddball_hazard_rate:
             # Oddball: bag from uniform distribution (anywhere on screen)
-            while True:
-                new_x = np.random.uniform(BAG_MIN_POS, BAG_MAX_POS + 1)
-                new_x = np.clip(new_x, BAG_MIN_POS, BAG_MAX_POS)
-                if abs(new_x - df.loc[t, "mu"]) > 3 * sigma:
-                    break  # Ensure oddball is sufficiently far from helicopter
-
-            df.loc[t, "x"] = new_x
+            new_x = np.random.uniform(BAG_MIN_POS, BAG_MAX_POS + 1)
+            df.loc[t, "x"] = np.clip(new_x, BAG_MIN_POS, BAG_MAX_POS)
             df.loc[t, "is_oddball"] = True
         else:
             # Normal: bag from helicopter location with noise
