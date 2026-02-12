@@ -61,6 +61,7 @@ class WeberModel(Network, Model):
         cols = [
             "x_0_expected_mean",
             "x_0_prediction_error",
+            # "x_0_surprise",
             "total_surprise",
         ]
 
@@ -70,14 +71,16 @@ class WeberModel(Network, Model):
             {
                 "x_0_expected_mean": self.inital_means[0],
                 "x_0_prediction_error": 0.0,
-                "x_0_surprise": 0.0,
+                # "x_0_surprise": 0.0,
+                "total_surprise": 0.0,
             },
             index=[0],
         )
 
         output = pd.concat([inital_row, output], ignore_index=True)
 
-        output["total_free_energy"] = -output["x_0_surprise"]
+        # output["total_free_energy"] = -output["x_0_surprise"]
+        output["variational_free_energy"] = -output["total_surprise"]
 
         rename_dict = {
             "x_0_expected_mean": "beliefs",

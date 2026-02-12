@@ -224,10 +224,12 @@ class HGFPaper2Gaussian(Model):
         term_b = (self.sig1 + ((observation - self.mu1) ** 2)) / self.cfg.s
         term_b *= -0.5
 
-        term_c = np.log(sigma1_prev + np.exp(self.mu2))
+        term_c = np.log(sigma1_prev + exp_clip(self.mu2, self.cfg.exp_clip_value))
         term_c *= -0.5
 
-        term_d = (self.sig1 + (self.mu1 - mu1_prev) ** 2) / (sigma1_prev + np.exp(self.mu2))
+        term_d = (self.sig1 + (self.mu1 - mu1_prev) ** 2) / (
+            sigma1_prev + exp_clip(self.mu2, self.cfg.exp_clip_value)
+        )
         term_d *= -0.5
 
         term_e = np.log(sigma2_prev + self.cfg.eta)

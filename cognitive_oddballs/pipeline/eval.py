@@ -58,9 +58,9 @@ def set_seed(seed: int = 42):
 
 
 # Evaluation metrics
-def rmse(predictions: np.ndarray, beliefs: np.ndarray) -> float:
-    """Root Mean Square Error (RMSE) between predictions and targets."""
-    return np.sqrt(np.mean((predictions - beliefs) ** 2))
+def rmse(posterior_belief: np.ndarray, hidden_state: np.ndarray) -> float:
+    """Root Mean Square Error (RMSE) between the posterior belief and the hidden state."""
+    return np.sqrt(np.mean((posterior_belief - hidden_state) ** 2))
 
 
 def log_likelihood(predictions: np.ndarray, targets: np.ndarray, noise_std: float) -> float:
@@ -80,11 +80,6 @@ class GaussianResponseModel:
 
     def sample(self, raw_response: float) -> float:
         return raw_response + np.random.randn() * self.sigma
-
-    # def log_likelihood(self, response: float, belief_mean: float) -> float:
-    #     return -0.5 * ((response - belief_mean) / self.sigma) ** 2 - np.log(
-    #         np.sqrt(2 * np.pi) * self.sigma
-    #     )
 
 
 # Core simulation loop
@@ -130,8 +125,7 @@ def run_experiment(
             outputs = run_model_on_environment(model, response_model, environment)
 
             # Calculate RMSE: How well does the model's mechanism update the belief for timestep t
-            # seeing observation at timestep t
-            total_rmse = rmse(outputs["beliefs"].to_numpy()[1:], environment["x"].to_numpy())
+            total_rmse = rmse(outputs["beliefs"].to_numpy()[1:], environment["mu"].to_numpy())
 
             total_free_energy = np.sum(outputs["variational_free_energy"])
 
@@ -157,13 +151,16 @@ def run_experiment(
 
 def experiment_changepoint(n_trials: int, n_simulations: int):
     models: dict[str, Model] = {
-        "CPM": ChangePointModelVariational(
+        "CPM_OPTIM": ChangePointModelVariational(
             mu0=246.4316841,
             sigma0=0.1,
             obs_noise_std=38.3689664562455,
             w1_std=0.0001,
             w2_std=285.1587011,
             h=0.164325442,
+        ),
+        "CPM": ChangePointModelVariational(
+            mu0=250, sigma0=50, obs_noise_std=25, w1_std=0.1, w2_std=30, h=0.1
         ),
         "HGF": HGFPaper2Gaussian(eta=0.005, s=15.0, mu1_init=250.0),
         "gHGF": WeberModel(),
@@ -183,6 +180,14 @@ def experiment_changepoint(n_trials: int, n_simulations: int):
 
 def experiment_randomwalk(n_trials: int, n_simulations: int):
     models: dict[str, Model] = {
+        "CPM_OPTIM": ChangePointModelVariational(
+            mu0=246.30069841471,
+            sigma0=0.1,
+            obs_noise_std=28.3168277436353,
+            w1_std=0.0001,
+            w2_std=266.426872348825,
+            h=0.184822388990129,
+        ),
         "CPM": ChangePointModelVariational(
             mu0=250, sigma0=50, obs_noise_std=25, w1_std=0.1, w2_std=30, h=0.1
         ),
@@ -201,15 +206,17 @@ def experiment_randomwalk(n_trials: int, n_simulations: int):
 # Visualization
 
 
-def create_comparison_boxplot(results_dict: dict, save_path: Path | None = None):
+def create_comparison_boxplot(
+    results_dict: dict, models: list[str], colors: dict[str, str], save_path: Path | None = None
+):
     """
     Create a two-panel boxplot comparing CPM, HGF, and gHGF across environments.
 
     Args:
         results_dict: Dict with structure:
             {
-                'switching': {'CPM': [...], 'HGF': [...], 'gHGF': [...]},
-                'diffusive': {'CPM': [...], 'HGF': [...], 'gHGF': [...]}
+                'changepoint': {'Model 1': [...],'Model 2': [...], ...]},
+                'randomwalk': {'Model 1': [...],'Model 2': [...], ...]}
             }
             where each list contains simulation results with 'rmse' and 'free_energy' keys
         save_path: Optional path to save the figure
@@ -219,9 +226,9 @@ def create_comparison_boxplot(results_dict: dict, save_path: Path | None = None)
     """
     from matplotlib.patches import Patch
 
-    environments = ["switching", "diffusive"]
-    models = ["CPM", "HGF", "gHGF"]
-    colors = {"CPM": "#D4A574", "HGF": "#9B79B5", "gHGF": "#5DAE8B"}
+    environments = ["changepoint", "randomwalk"]
+    # models = ["CPM_OPTIM", "CPM", "HGF", "gHGF"]
+    # colors = {"CPM": "#0066cc", "HGF": "#3399ff", "gHGF": "#66b3ff"}
 
     # Extract metrics from results
     def extract_metric(metric_name):
@@ -302,27 +309,55 @@ if __name__ == "__main__":
     n_trials = 100
     n_simulations = 1000
 
-    # Organize results for visualization
-    results_dict = {
-        "switching": {"CPM": [], "HGF": [], "gHGF": []},
-        "diffusive": {"CPM": [], "HGF": [], "gHGF": []},
-    }
-
     results_cp = experiment_changepoint(n_trials=n_trials, n_simulations=n_simulations)
     results_rw = experiment_randomwalk(n_trials=n_trials, n_simulations=n_simulations)
 
-    # Extract CPM, HGF, and gHGF from changepoint (switching)
+    # Organize results for visualization
+    results_dict = {
+        "changepoint": {"CPM": [], "HGF": [], "gHGF": []},
+        "randomwalk": {"CPM": [], "HGF": [], "gHGF": []},
+    }
+
+    # Extract CPM, HGF, and gHGF from changepoint
     for model_name in ["CPM", "HGF", "gHGF"]:
         if model_name in results_cp:
-            results_dict["switching"][model_name] = results_cp[model_name]
+            results_dict["changepoint"][model_name] = results_cp[model_name]
 
-    # Extract CPM, HGF, and gHGF from randomwalk (diffusive)
+    # Extract CPM, HGF, and gHGF from randomwalk
     for model_name in ["CPM", "HGF", "gHGF"]:
         if model_name in results_rw:
-            results_dict["diffusive"][model_name] = results_rw[model_name]
+            results_dict["randomwalk"][model_name] = results_rw[model_name]
 
     with (RESULTS_DIR / "results.json").open("w") as f:
         json.dump(results_dict, f, indent=2, default=str)
 
     # Create visualization
-    create_comparison_boxplot(results_dict, save_path=FIGURES_DIR / "model_comparison.png")
+    create_comparison_boxplot(
+        results_dict,
+        models=["CPM", "HGF", "gHGF"],
+        colors={"CPM": "#0052cc", "HGF": "#0084ff", "gHGF": "#40b3ff"},
+        save_path=FIGURES_DIR / "model_comparison.png",
+    )
+
+    results_dict = {
+        "changepoint": {"CPM": [], "CPM_OPTIM": []},
+        "randomwalk": {"CPM": [], "CPM_OPTIM": []},
+    }
+
+    for model_name in ["CPM", "CPM_OPTIM"]:
+        if model_name in results_cp:
+            results_dict["changepoint"][model_name] = results_cp[model_name]
+
+        if model_name in results_rw:
+            results_dict["randomwalk"][model_name] = results_rw[model_name]
+
+    with (RESULTS_DIR / "results_optim.json").open("w") as f:
+        json.dump(results_dict, f, indent=2, default=str)
+
+    # Create visualization
+    create_comparison_boxplot(
+        results_dict,
+        models=["CPM", "CPM_OPTIM"],
+        colors={"CPM": "#0052cc", "CPM_OPTIM": "#0084ff"},
+        save_path=FIGURES_DIR / "model_comparison_optim.png",
+    )
