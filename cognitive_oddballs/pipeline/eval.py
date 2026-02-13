@@ -256,8 +256,9 @@ if __name__ == "__main__":
 
     # plot_learning_rate_vs_error(results_rw, "Random-walk oddball environment")
 
-    param_results_cp, param_results_rw = run_param_optimization(n_envs=10, n_trials=100, seed=42) # TODO: adjust back to 1000, 100
+    param_results_cp, param_results_rw = run_param_optimization(n_envs=7, n_trials=100, seed=42) # TODO: adjust back to 1000, 100
 
+#hgf2_gaussian line 142
 
 
 # beliefs (Nassar: Belief; Weber: x_0_expected_mean)

@@ -98,25 +98,25 @@ class ChangePointModelVariational(Model):
     """
     def __init__(
             self, 
-            mu0: float = 0.0, # just needed to put any default parameters here for eval to work. they'll be overwritten anyway - R.
-            sigma0: float = 25.0, 
+            mu0: float = 250.0, # just needed to put any default parameters here for eval to work. they'll be overwritten anyway - R.
+            sigma0: float = 10.0, 
             # TODO: check names different
-            obs_noise: float = 25.0, # TODO: check that this is std dev and not variance, and that it's properly used in the code (squared when needed) - R.
+            obs_noise_std: float = 10.0, # TODO: check that this is std dev and not variance, and that it's properly used in the code (squared when needed) - R.
             w1_std: float = 0.01, # TODO: check that this is std dev and not variance, and that it's properly used in the code (squared when needed) - R.
             w2_std: float = 100.0,  # TODO: check that this is std dev and not variance, and that it's properly used in the code (squared when needed) - R.
             h: float = 0.1, 
             add_second_level: bool =True
         ) -> None:
         # ===== Perceptual free parameters =====
-        self.mu0 = mu0  # μ₀¹ - Initial belief
-        self.sigma0 = sigma0  # σ₀¹ - Initial uncertainty
-        self.obs_noise = obs_noise_std  # s - Observation noise (std dev)
-        self.hazard_rate = h  # h - Hazard rate
+        self.mu0 = float(mu0)  # μ₀¹ - Initial belief
+        self.sigma0 = float(sigma0)  # σ₀¹ - Initial uncertainty
+        self.obs_noise = float(obs_noise_std)  # s - Observation noise (std dev)
+        self.hazard_rate = float(h)  # h - Hazard rate
 
         # STORE STANDARD DEVITAION VALUES
-        self.obs_noise_std = obs_noise_std  # s - Observation noise (std dev)
-        self.w1_std = w1_std  # w₁ - Stability diffusion (std dev)
-        self.w2_std = w2_std  # w₂ - Change-point variance (std dev)
+        self.obs_noise_std = float(obs_noise_std)  # s - Observation noise (std dev)
+        self.w1_std = float(w1_std)  # w₁ - Stability diffusion (std dev)
+        self.w2_std = float(w2_std)  # w₂ - Change-point variance (std dev)
 
         # VARIANCE CONVERSION FOR INTERNAL USE
         self.obs_noise_var = obs_noise_std**2
@@ -241,13 +241,10 @@ class ChangePointModelVariational(Model):
         # x_t follows x_{t-1} with small drift w1
         var_stability = self.sigma**2 + self.w1_var + self.obs_noise_var
         like_stability = stats.norm.pdf(delta, loc=0.0, scale=np.sqrt(var_stability))
-        #var_stability = self.sigma**2 + self.w1 + self.obs_noise**2
-        #like_stability = stats.norm.pdf(delta, loc=0.0, scale=np.sqrt(var_stability))
 
         # Likelihood under change-point
         # x_t is drawn from a wide distribution (large w2)
         var_change = self.obs_noise_var + self.w2_var
-        # TODO: var_change = self.obs_noise**2 + self.w2
         like_change = stats.norm.pdf(delta, loc=0.0, scale=np.sqrt(var_change))
 
         # Bayes rule with hazard rate as prior
@@ -300,11 +297,11 @@ class ChangePointModelVariational(Model):
 
         # 4. Learning rate (ratio of posterior to observation uncertainty)
         alpha = sigma_new / self.obs_noise_std
-        alpha = np.clip(alpha, 0.0, 1.0)  # Ensure valid range
+        alpha = float(np.clip(alpha, 0.0, 1.0))  # Ensure valid range
 
         # 5. Update posterior expectation (delta rule)
         mu_new = mu1_prev + alpha * delta
-        mu_new = np.clip(mu_new, 0, 500)  # Clip to valid screen range
+        mu_new = float(np.clip(mu_new, 0, 500))  # Clip to valid screen range
 
         # 6. Second-level update (if enabled)
         epsilon2 = 0.0
@@ -475,16 +472,22 @@ class ChangePointModelVariational(Model):
     # TODO: LLM-generated -- verify correctness
     def set_parameters_cma(self, theta: np.ndarray) -> None:
         """
-        theta = [log_obs_noise, log_w1, log_w2, logit_h]
+        theta = [mu0, log_sigma0, log_obs_noise, log_w1, log_w2, logit_h]
         """
-        log_s, log_w1, log_w2, logit_h = map(float, theta)
+        mu0, log_sigma0, log_s, log_w1, log_w2, logit_h = map(float, theta)
 
-        self.obs_noise = float(np.exp(log_s))
-        self.w1 = float(np.exp(log_w1))
-        self.w2 = float(np.exp(log_w2))
+        self.mu0 = mu0
+        self.sigma0 = float(np.exp(log_sigma0))
+        self.obs_noise_std = float(np.exp(log_s))
+        self.w1_std = float(np.exp(log_w1))
+        self.w2_std = float(np.exp(log_w2))
         self.hazard_rate = float(1.0 / (1.0 + np.exp(-logit_h)))  # sigmoid
 
-        # reset state to priors for this parameter setting
+        # VARIANCE CONVERSION FOR INTERNAL USE
+        self.obs_noise_var = self.obs_noise_std**2
+        self.w1_var = self.w1_std**2
+        self.w2_var = self.w2_std**2
+
         self.mu = self.mu0
         self.sigma = self.sigma0
 
@@ -495,23 +498,15 @@ class ChangePointModelVariational(Model):
         # reset history
         self.history = pd.DataFrame(columns=self.history.columns)
 
-    # TODO: LLM-generated -- verify correctness
-    # IMPORTANT: this might a) not work and (more importantly)
-    # b) be the wrong objective for this model
-    # this should be Eq. 60/61 in Marković & Kiebel (2016)
-    # but I have not looked at that closely, cause I need to go now.
+
     def objective_cma(self, observations: np.ndarray) -> float:
         """
-        CMA-ES objective for the Nassar/Markovic change-point model,
-        using Eq. (52): sum of negative log marginal likelihoods.
+        CMA-ES objective: negative total variational free energy over the sequence.
 
-        For each trial t:
-            -ln p(o_t | O_{t-1}, θ)
-            = -ln [ (1-h) N(o_t; μ_{t-1}, σ_{t-1}^2 + w1 + s^2)
-                    + h     N(o_t; 0,        w2      + s^2) ].
+        Uses the per-trial free energy computed in 'update' via calc_variational_free_energy
+        and stored in history. We sum (or average) this over all trials to get the objective value.
 
-        We sum this over t and return the total (or you can divide by T
-        if you prefer an average; CMA-ES only cares about monotonicity).
+        CMA minimizes this objective, so we return the negative free energy (or negative average free energy).
         """
         # reset state and history for this sequence
         self.mu = self.mu0
@@ -520,74 +515,43 @@ class ChangePointModelVariational(Model):
             self.mu2 = 0.0
             self.sigma2 = 1.0
 
-        neg_loglik_sum = 0.0
+        # clear history
+        self.history = pd.DataFrame(columns=self.history.columns)
 
-        for o in observations:
-            o = float(o)
-            mu_prev = self.mu
-            sigma_prev = self.sigma
+        # run the full sequency
+        self.run(observations)
+        F = self.history["variational_free_energy"].to_numpy(dtype=float)
 
-            # ----- Eq. (52): mixture components in observation space -----
-            var_stab = sigma_prev**2 + self.w1 + self.obs_noise**2
-            var_ch   = self.w2 + self.obs_noise**2
+        if not np.all(np.isfinite(F)):
+            raise FloatingPointError(f"Non-finite free energy values encountered: {F}")
 
-            lp_stab = stats.norm.logpdf(o, loc=mu_prev, scale=np.sqrt(var_stab))
-            lp_ch   = stats.norm.logpdf(o, loc=0.0,    scale=np.sqrt(var_ch))
-
-            # log p(o_t | O_{t-1}, θ) = logsumexp over the two regimes
-            log_p_ot = logsumexp([
-                np.log(1.0 - self.hazard_rate) + lp_stab,
-                np.log(self.hazard_rate)       + lp_ch,
-            ])
-
-            neg_loglik_sum += -log_p_ot
-
-            # ----- change-point probability Ω_t (for the state update) -----
-            log_num_change = np.log(self.hazard_rate) + lp_ch
-            omega = float(np.exp(log_num_change - log_p_ot))
-
-            # ----- state update (same logic as your update()) -----
-            delta = o - mu_prev
-
-            inv_sigma_sq = (1.0 - omega) / (sigma_prev**2 + self.w1) \
-                           + 1.0 / (self.obs_noise**2)
-            sigma_new = 1.0 / np.sqrt(inv_sigma_sq)
-
-            alpha = sigma_new / self.obs_noise
-            alpha = np.clip(alpha, 0.0, 1.0)
-
-            mu_new = mu_prev + alpha * delta
-            mu_new = np.clip(mu_new, 0.0, 500.0)
-
-            # optional: second-level update as before
-            if self.add_second_level:
-                # you can keep your existing simple 2nd-level update here
-                pass
-
-            self.mu = mu_new
-            self.sigma = sigma_new
-
-        return float(neg_loglik_sum)
+        total_F = np.sum(F)
+        
+        return float(-total_F) # CMA minimizes, so we return negative free energy
 
     # TODO: LLM-generated -- verify correctness
     @staticmethod
     def decode_cma_theta(theta: np.ndarray) -> dict:
         """
         Map CMA parameter vector back to named, interpretable parameters.
-        theta = [log_obs_noise, log_w1, log_w2, logit_h]
+        theta = [mu0, log_sigma0, log_obs_noise, log_w1, log_w2, logit_h]
         """
-        log_s, log_w1, log_w2, logit_h = map(float, theta)
+        mu0, log_sigma0, log_s, log_w1, log_w2, logit_h = map(float, theta)
 
+        sigma0 = float(np.exp(log_sigma0))
         obs_noise = float(np.exp(log_s))
         w1 = float(np.exp(log_w1))
         w2 = float(np.exp(log_w2))
         h = float(1.0 / (1.0 + np.exp(-logit_h)))
 
         return {
+            "mu0": mu0,
+            "sigma0": sigma0,
             "obs_noise": obs_noise,
             "w1": w1,
             "w2": w2,
             "hazard_rate": h,
+            "log_sigma0": log_sigma0,
             "log_obs_noise": log_s,
             "log_w1": log_w1,
             "log_w2": log_w2,

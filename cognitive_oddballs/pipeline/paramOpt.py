@@ -95,38 +95,106 @@ def objective_function_cma_theta(
         # large penalty so CMA-ES moves away from region
         return penalty    
 
-        
 def cma_optimization(cma_params: dict, envs: list[np.ndarray], seed: int = 42):
     """
-    cma_params: dict mapping model class -> dict of CMA config
-    envs: list of observation arrays (same set used for all models in this call)
+    Returns:
+        results: dict mapping model name -> {
+            'theta_best': np.ndarray,
+            'decoded': dict,
+            'f_best': float,
+        }
     """
-    optimal_thetas = {}
+    results = {}
 
     for model_cls, params in cma_params.items():
         logger.info(f"Optimizing {model_cls.__name__}...")
 
-        # need objective function with only theta as parameters
         objective = make_cma_objective(model_cls, envs)
 
         es_result = cma.fmin(
             objective,
             x0=params["x0"],
-            sigma0=params["sigma0"], # initial global step-size
+            sigma0=params["sigma0"],
             options={
                 "bounds": params["bounds"],
-                "maxfevals": params["maxfevals"], # limit evaluations
-                "verb_disp": params["verb_disp"], # verbosity
-                # "popsize": 16, # optional: control population size
-                "seed": seed, # for reproducibility
+                "maxfevals": params["maxfevals"],
+                "verb_disp": params["verb_disp"],
+                "seed": seed,
             },
         )
 
-        theta_best = es_result[0]  # best CMA-ES parameter vector
-        optimal_thetas[model_cls.__name__] = theta_best
+        theta_best = np.asarray(es_result[0], dtype=float)
+        f_best = float(es_result[1])  # best function value
 
-    return optimal_thetas    
+        # decode if available
+        decoded = model_cls.decode_cma_theta(theta_best)
+       
 
+        results[model_cls.__name__] = {
+            "theta_best": theta_best,
+            "decoded": decoded,
+            "f_best": f_best,
+        }
+
+    return results
+        
+# def cma_optimization(cma_params: dict, envs: list[np.ndarray], seed: int = 42):
+#     """
+#     cma_params: dict mapping model class -> dict of CMA config
+#     envs: list of observation arrays (same set used for all models in this call)
+#     """
+#     optimal_thetas = {}
+
+#     for model_cls, params in cma_params.items():
+#         logger.info(f"Optimizing {model_cls.__name__}...")
+
+#         # need objective function with only theta as parameters
+#         objective = make_cma_objective(model_cls, envs)
+
+#         es_result = cma.fmin(
+#             objective,
+#             x0=params["x0"],
+#             sigma0=params["sigma0"], # initial global step-size
+#             options={
+#                 "bounds": params["bounds"],
+#                 "maxfevals": params["maxfevals"], # limit evaluations
+#                 "verb_disp": params["verb_disp"], # verbosity
+#                 # "popsize": 16, # optional: control population size
+#                 "seed": seed, # for reproducibility
+#             },
+#         )
+
+#         theta_best = es_result[0]  # best CMA-ES parameter vector
+#         optimal_thetas[model_cls.__name__] = theta_best
+
+#     return optimal_thetas    
+
+def save_param_results(results: dict, env_type: str, filename: str) -> None:
+    """
+    results: output of cma_optimization
+    env_type: "changepoint" / "randomwalk" etc.
+    filename: e.g. "cma_params_changepoint.csv"
+    """
+    records = []
+    for model_name, res in results.items():
+        rec = {
+            "env_type": env_type,
+            "model": model_name,
+            "f_best": res["f_best"],
+        }
+        # store raw theta as separate columns
+        theta = res["theta_best"]
+        for i, val in enumerate(theta):
+            rec[f"theta_{i}"] = float(val)
+        # add decoded parameters with names
+        for k, v in res["decoded"].items():
+            rec[k] = float(v)
+        records.append(rec)
+
+    df = pd.DataFrame.from_records(records)
+    out_path = RESULTS_DIR / filename
+    df.to_csv(out_path, index=False)
+    logger.info("Saved CMA-ES results to %s", out_path)
 
 def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 42):
     set_seed(seed)
@@ -136,29 +204,85 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
 
     # TODO: Define proper parameter settings for each model
     cma_params_cmp = {
-        # [log_obs_noise, log_w1, log_w2, logit_h]
-        "x0": [np.log(10.0), np.log(0.01), np.log(100.0), np.log(0.1 / 0.9)],
+        # [mu0, log_sigma0, log_obs_noise_std, log_w1_std, log_w2_std, logit_h]
+        "x0": [
+            250.0,               # mu0
+            np.log(10.0),        # sigma0
+            np.log(10.0),        # s
+            np.log(0.01),        # w1_std
+            np.log(100.0),       # w2_std
+            np.log(0.1 / 0.9),   # h = 0.1
+        ],
         "bounds": (
-            [np.log(1.0),  np.log(1e-4), np.log(1.0),   -5.0],  # lower
-            [np.log(50.0), np.log(1.0),  np.log(1e4),    5.0],  # upper
+            [  0.0,
+            np.log(0.1),      # sigma0_min
+            np.log(1.0),      # s_min
+            np.log(1e-4),     # w1_min
+            np.log(20.0),     # w2_min
+            np.log(0.01 / 0.99),  # logit(h_min)
+            ],
+            [ 500.0,
+            np.log(100.0),    # sigma0_max
+            np.log(50.0),     # s_max
+            np.log(1.0),      # w1_max
+            np.log(500.0),    # w2_max
+            np.log(0.5 / 0.5),  # logit(h_max) = 0.0
+            ],
         ),
-        "sigma0": 0.5,  # initial global step-size
-        "maxfevals": 5000,  # maximum number of function evaluations
-        "verb_disp": 100,  # verbosity level
+        "sigma0": 0.5,
+        "maxfevals": 5000,
+        "verb_disp": 100,
     }
 
+    # cma_params_hgf = {
+    #     # have parameters: mu1_init, sig1_init, mu2_init, sig2_init, eta, s
+    #     # --> which ones to optimize?
+    #     # initial guess: log_eta, log_s, mu2_0, log_sig2_0
+    #     "x0": [
+    #         np.log(0.01), 
+    #         np.log(15.0**2), 
+    #         -4.0, 
+    #         np.log(1.0)
+    #         ],
+    #     "bounds": (
+    #         [np.log(1e-5), np.log(1.0), -10.0, np.log(1e-3)],   # lower
+    #         [np.log(1.0),  np.log(1e4),  10.0, np.log(1e2)],    # upper
+    #     ),
+    #     "sigma0": 0.5,  # initial global step-size
+    #     "maxfevals": 5000,  # maximum number of function evaluations
+    #     "verb_disp": 100,  # verbosity level
+    # }
+
     cma_params_hgf = {
-        # have parameters: mu1_init, sig1_init, mu2_init, sig2_init, eta, s
-        # --> which ones to optimize?
-        # initial guess: log_eta, log_s, mu2_0, log_sig2_0
-        "x0": [np.log(0.01), np.log(15.0**2), -4.0, np.log(1.0)],
+        "x0": [
+            0.0,             # mu1_0
+            np.log(10.0),    # sig1_0 (variance)
+            -4.0,            # mu2_0
+            np.log(1.0),     # sig2_0 (variance)
+            np.log(0.005),   # eta
+            np.log(15.0**2), # s
+        ],
         "bounds": (
-            [np.log(1e-5), np.log(1.0), -10.0, np.log(1e-3)],   # lower
-            [np.log(1.0),  np.log(1e4),  10.0, np.log(1e2)],    # upper
+            [  # lower
+                -50.0,            # mu1_0
+                np.log(1e-3),     # sig1_0
+                -10.0,            # mu2_0
+                np.log(1e-3),     # sig2_0
+                np.log(1e-5),     # eta
+                np.log(1.0),      # s
+            ],
+            [  # upper
+                50.0,             # mu1_0
+                np.log(1e3),      # sig1_0
+                10.0,             # mu2_0
+                np.log(1e3),      # sig2_0
+                np.log(1.0),      # eta
+                np.log(1e4),      # s
+            ],
         ),
-        "sigma0": 0.5,  # initial global step-size
-        "maxfevals": 5000,  # maximum number of function evaluations
-        "verb_disp": 100,  # verbosity level
+        "sigma0": 0.5,
+        "maxfevals": 5000,
+        "verb_disp": 100,
     }
 
     cma_params_weber = {
@@ -174,21 +298,31 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
 
     # TODO: auskommentiert for testing, toggle that back when done
     cma_optimization_params = {
-        ChangePointModelVariational: cma_params_cmp,
-        #HGFPaper2Gaussian: cma_params_hgf,
+        #ChangePointModelVariational: cma_params_cmp,
+        HGFPaper2Gaussian: cma_params_hgf,
         #WeberModel: cma_params_weber,
     }
 
     logger.info("Optimizing models on Change Point Environments")
-    cp_results = cma_optimization(cma_optimization_params, cp_envs)
+    cp_results = cma_optimization(cma_optimization_params, cp_envs, seed=seed)
     logger.info("\nChange Point Environment Optimization Results:")
     for model_name, result in cp_results.items():
         logger.info(f"  {model_name}: {result}")
 
+    # TODO: adjust filename to reflect which models were optimized, e.g. "cma_params_changepoint_cmp.csv"
+    save_param_results(cp_results, "changepoint", "cma_params_changepoint_hgf.csv")
+
     logger.info("\nOptimizing models on Random Walk Environments")
-    rw_results = cma_optimization(cma_optimization_params, rw_envs)
+    rw_results = cma_optimization(cma_optimization_params, rw_envs, seed=seed)
     logger.info("\nRandom Walk Environment Optimization Results:")
     for model_name, result in rw_results.items():
         logger.info(f"  {model_name}: {result}")
 
+    save_param_results(rw_results, "randomwalk", "cma_params_randomwalk_hgf.csv")
+
     return cp_results, rw_results
+
+    
+
+    
+

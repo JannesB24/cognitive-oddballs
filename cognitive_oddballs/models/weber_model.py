@@ -233,13 +233,13 @@ class WeberModel(Network, Model):
     #     self.input_data(input)
 
     # replaced by run()
-    def get_outputs(self):
-        trajectories = self.to_pandas()
-        outputs = {"prediction_errors": trajectories["x_0_prediction_error"], "updates": []}
-        # not sure for the last one, which index to use. I don't know if a new prediction is
-        # made before a new input would be given, so for now it simply appends the last known
-        # prediction even tho it pertains to the last observation
-        for i in range(len(trajectories) - 1):
-            outputs["updates"].append(trajectories.loc[i + 1, "x_0_expected_mean"])
-        outputs["updates"].append(trajectories.loc[len(trajectories), "x_0_expected_mean"])
-        return outputs
+    # def get_outputs(self):
+    #     trajectories = self.to_pandas()
+    #     outputs = {"prediction_errors": trajectories["x_0_prediction_error"], "updates": []}
+    #     # not sure for the last one, which index to use. I don't know if a new prediction is
+    #     # made before a new input would be given, so for now it simply appends the last known
+    #     # prediction even tho it pertains to the last observation
+    #     for i in range(len(trajectories) - 1):
+    #         outputs["updates"].append(trajectories.loc[i + 1, "x_0_expected_mean"])
+    #     outputs["updates"].append(trajectories.loc[len(trajectories), "x_0_expected_mean"])
+    #     return outputs
