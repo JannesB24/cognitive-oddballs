@@ -6,9 +6,6 @@ from cognitive_oddballs.environments.change_point_oddball import generate_change
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
 from cognitive_oddballs.models.weber_model import WeberModel as Weber_model
 
-# from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
-# from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
-
 
 # Author: Lucy Heuer
 
@@ -449,7 +446,7 @@ test_rw_low_p = Weber_model(n_nodes=5, x_4_p=3,update_type="eHGF").input_data(ra
 # mean_and_jump_comp_hp_lp.to_csv("hp_lp_jump_comp.csv")
 
 
-### comparing performance of 5 node network with "standard", a 4 node network with "standard" and 4 node with "eHGF" across many instantiations of environments (500 trials each)
+# ### comparing performance of 5 node network with "standard", a 4 node network with "standard" and 4 node with "eHGF" across many instantiations of environments (500 trials each)
 # rw_5_surprises=[]
 # rw_s_surprises=[]
 # rw_e_surprises=[]
@@ -483,11 +480,11 @@ test_rw_low_p = Weber_model(n_nodes=5, x_4_p=3,update_type="eHGF").input_data(ra
 
 # surprise_comparison_across_instances = pd.DataFrame({"rw_5": rw_5_surprises,"rw_s":rw_s_surprises, "rw_e":rw_e_surprises,"cp_5":cp_5_surprises ,"cp_s": cp_s_surprises, "cp_e": cp_e_surprises})
 # surprise_comparison_across_instances.to_csv("s_c_a_i.csv")
-# ## RESULT
-# # although removing node 5 lead to better performance initially, there are still cases in which the model drops out. 
-# # while the "standard" update type seems to prevent drop outs, this is no quarantee that it could not happen in even more volatile environments.
+# # ## RESULT
+# # # although removing node 5 lead to better performance initially, there are still cases in which the model drops out. 
+# # # while the "standard" update type seems to prevent drop outs, this is no quarantee that it could not happen in even more volatile environments.
 
-### Directly comparing the performance of the 5 node model with "standard" update type to the 4 node model of the same type
+# ### Directly comparing the performance of the 5 node model with "standard" update type to the 4 node model of the same type
 
 # cmap = plt.get_cmap("Blues")
 # colors = cmap(np.linspace(0,1,6))
