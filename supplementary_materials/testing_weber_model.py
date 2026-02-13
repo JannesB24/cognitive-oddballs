@@ -6,6 +6,10 @@ from cognitive_oddballs.environments.change_point_oddball import generate_change
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
 from cognitive_oddballs.models.weber_model import WeberModel as Weber_model
 
+# from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
+# from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
+
+
 # Author: Lucy Heuer
 
 def compare_trajectories(models: list, node_idx: int, col_to_compare: str) -> pd.DataFrame:
@@ -219,18 +223,18 @@ def comparing_mean_jumps(m1: Weber_model, m2: Weber_model, model_names: list) ->
 # ## the default parameters currently implemented for Weber_model are the ones allowing the model to run with only 3 nodes (as Weber suggested)
 
 # # # ## generating data from both environments
-# change_point_data = generate_change_point_environment(
-#     n_trials=1000, oddball_hazard_rate=0.15, sigma=20, change_point_hazard_rate=0.1, seed=42
-# )
-# random_walk_data = generate_random_walk_environment(
-#     n_trials=1000, oddball_hazard_rate=0.15, sigma=20, seed=42
-# )
+change_point_data = generate_change_point_environment(
+    n_trials=1000, oddball_hazard_rate=0.15, sigma=20, change_point_hazard_rate=0.1, seed=42
+)
+random_walk_data = generate_random_walk_environment(
+    n_trials=1000, oddball_hazard_rate=0.15, sigma=20, seed=42
+)
 
 
 # ### creating Model instances with different parameters
 
 # ## 5 nodes (different precisions) with update_type="eHGF"
-# test_rw_low_p = Weber_model(n_nodes=5, x_4_p=3,update_type="eHGF").input_data(random_walk_data["x"].to_numpy())
+test_rw_low_p = Weber_model(n_nodes=5, x_4_p=3,update_type="eHGF").input_data(random_walk_data["x"].to_numpy())
 # test_cp_low_p = Weber_model(n_nodes=5, x_4_p=3,update_type="eHGF").input_data(change_point_data["x"].to_numpy())
 # test_rw_high_p = Weber_model(n_nodes=5,update_type="eHGF").input_data(random_walk_data["x"].to_numpy())
 # test_cp_high_p = Weber_model(n_nodes=5,update_type="eHGF").input_data(change_point_data["x"].to_numpy())
@@ -446,60 +450,60 @@ def comparing_mean_jumps(m1: Weber_model, m2: Weber_model, model_names: list) ->
 
 
 ### comparing performance of 5 node network with "standard", a 4 node network with "standard" and 4 node with "eHGF" across many instantiations of environments (500 trials each)
-rw_5_surprises=[]
-rw_s_surprises=[]
-rw_e_surprises=[]
+# rw_5_surprises=[]
+# rw_s_surprises=[]
+# rw_e_surprises=[]
 
-cp_5_surprises=[]
-cp_s_surprises=[]
-cp_e_surprises=[]
+# cp_5_surprises=[]
+# cp_s_surprises=[]
+# cp_e_surprises=[]
 
-for i in range(100):
-    current_cp = generate_change_point_environment(n_trials=500, oddball_hazard_rate=0.15, sigma=20, change_point_hazard_rate=0.1,seed=i)["x"].to_numpy()
-    current_rw = generate_random_walk_environment(n_trials=500, oddball_hazard_rate=0.15, sigma=20,seed=i)["x"].to_numpy()
+# for i in range(100):
+#     current_cp = generate_change_point_environment(n_trials=500, oddball_hazard_rate=0.15, sigma=20, change_point_hazard_rate=0.1,seed=i)["x"].to_numpy()
+#     current_rw = generate_random_walk_environment(n_trials=500, oddball_hazard_rate=0.15, sigma=20,seed=i)["x"].to_numpy()
 
-    rw_5_model = Weber_model(n_nodes=5).input_data(current_rw)
-    rw_s_model = Weber_model().input_data(current_rw)
-    rw_e_model = Weber_model(update_type="eHGF").input_data(current_rw)
+#     rw_5_model = Weber_model(n_nodes=5).input_data(current_rw)
+#     rw_s_model = Weber_model().input_data(current_rw)
+#     rw_e_model = Weber_model(update_type="eHGF").input_data(current_rw)
 
-    cp_5_model = Weber_model(n_nodes=5).input_data(current_cp)
-    cp_s_model = Weber_model().input_data(current_cp)
-    cp_e_model = Weber_model(update_type="eHGF").input_data(current_cp)
+#     cp_5_model = Weber_model(n_nodes=5).input_data(current_cp)
+#     cp_s_model = Weber_model().input_data(current_cp)
+#     cp_e_model = Weber_model(update_type="eHGF").input_data(current_cp)
 
-    comp = compare_surprise(
-        [rw_5_model, rw_s_model, rw_e_model, cp_5_model, cp_s_model, cp_e_model],
-        ["rw_5_model","rw_s_model","rw_e_model", "cp_5_model", "cp_s_model", "cp_e_model"]
-    )
-    rw_5_surprises.append(comp.iloc[0,1])
-    rw_s_surprises.append(comp.iloc[1,1])
-    rw_e_surprises.append(comp.iloc[2,1])
-    cp_5_surprises.append(comp.iloc[3,1])
-    cp_s_surprises.append(comp.iloc[4,1])
-    cp_e_surprises.append(comp.iloc[5,1])
+#     comp = compare_surprise(
+#         [rw_5_model, rw_s_model, rw_e_model, cp_5_model, cp_s_model, cp_e_model],
+#         ["rw_5_model","rw_s_model","rw_e_model", "cp_5_model", "cp_s_model", "cp_e_model"]
+#     )
+#     rw_5_surprises.append(comp.iloc[0,1])
+#     rw_s_surprises.append(comp.iloc[1,1])
+#     rw_e_surprises.append(comp.iloc[2,1])
+#     cp_5_surprises.append(comp.iloc[3,1])
+#     cp_s_surprises.append(comp.iloc[4,1])
+#     cp_e_surprises.append(comp.iloc[5,1])
 
-surprise_comparison_across_instances = pd.DataFrame({"rw_5": rw_5_surprises,"rw_s":rw_s_surprises, "rw_e":rw_e_surprises,"cp_5":cp_5_surprises ,"cp_s": cp_s_surprises, "cp_e": cp_e_surprises})
-surprise_comparison_across_instances.to_csv("s_c_a_i.csv")
+# surprise_comparison_across_instances = pd.DataFrame({"rw_5": rw_5_surprises,"rw_s":rw_s_surprises, "rw_e":rw_e_surprises,"cp_5":cp_5_surprises ,"cp_s": cp_s_surprises, "cp_e": cp_e_surprises})
+# surprise_comparison_across_instances.to_csv("s_c_a_i.csv")
 # ## RESULT
 # # although removing node 5 lead to better performance initially, there are still cases in which the model drops out. 
 # # while the "standard" update type seems to prevent drop outs, this is no quarantee that it could not happen in even more volatile environments.
 
 ### Directly comparing the performance of the 5 node model with "standard" update type to the 4 node model of the same type
 
-cmap = plt.get_cmap("Blues")
-colors = cmap(np.linspace(0,1,6))
-fig,ax = plt.subplots()
-ax.set_ylabel("Summed surprise of node 0")
+# cmap = plt.get_cmap("Blues")
+# colors = cmap(np.linspace(0,1,6))
+# fig,ax = plt.subplots()
+# ax.set_ylabel("Summed surprise of node 0")
 
-bplot = ax.boxplot(
-    [rw_5_model, rw_s_model, cp_5_model, cp_s_model],
-    tick_labels=["RW 5 nodes", "RW 4 nodes", "CP 5 nodes","CP 4 nodes"],
-    patch_artist=True,
-    showfliers=False
-)
-for patch,color in zip(bplot["boxes"],colors):
-    patch.set_facecolor(color)
+# bplot = ax.boxplot(
+#     [rw_5_model, rw_s_model, cp_5_model, cp_s_model],
+#     tick_labels=["RW 5 nodes", "RW 4 nodes", "CP 5 nodes","CP 4 nodes"],
+#     patch_artist=True,
+#     showfliers=False
+# )
+# for patch,color in zip(bplot["boxes"],colors):
+#     patch.set_facecolor(color)
 
-plt.show()
+# plt.show()
 
 
 # ### saving stuff trajectories into csvs to ease inspection
