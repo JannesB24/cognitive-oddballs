@@ -1,10 +1,13 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
 from cognitive_oddballs.models.weber_model import WeberModel as Weber_model
 
+
+# Author: Lucy Heuer
 
 def compare_trajectories(models: list, node_idx: int, col_to_compare: str) -> pd.DataFrame:
     """Compiles the wanted node_trajectories into a DataFrame to ease comparison.
@@ -43,7 +46,7 @@ def compare_trajectories(models: list, node_idx: int, col_to_compare: str) -> pd
 
 
 def compare_surprise(models: list, model_names: list) -> pd.DataFrame:
-    """Compares the over all surprise of node 0 of two given Models
+    """Compares the over all surprise of node 0 of the given Models
 
     Input:
     - models: A list of models to be compared
@@ -160,6 +163,15 @@ def comparing_mean_jumps(m1: Weber_model, m2: Weber_model, model_names: list) ->
 
     return comparison
 
+#################################################################################################################
+# The code in this file is intended to test the functioning of the Model based on Weber et al. 2023
+# It somewhat chronicles the development of our model structure and some parts might seem redundant/slightly inconsistent because of that
+
+# The code in general is intended to be commented/ uncommented as needed 
+# (That is why large chunks of code are currently commented)
+#########################################################################################
+
+
 
 ### trying to find starting values, that make the model run according to Prof. Webers suggestions
 
@@ -203,12 +215,11 @@ def comparing_mean_jumps(m1: Weber_model, m2: Weber_model, model_names: list) ->
 # diffs_overview = pd.DataFrame({"CP diffs": cp_diffs, "RW diffs": rw_diffs})
 # diffs_overview.to_csv("diffs_overview.csv")
 
-### Code is set up to be (un-)commented as needed
-# the code evolved over time and was updated to fit the current build of the model (some of the things done might seem redundant due to the developing context over time)
 
-## the default parameters currently implemented for Weber_model are the ones allowing the model to run with only 3 nodes (as Weber suggested)
 
-# # ## generating data from both environments
+# ## the default parameters currently implemented for Weber_model are the ones allowing the model to run with only 3 nodes (as Weber suggested)
+
+# # # ## generating data from both environments
 change_point_data = generate_change_point_environment(
     n_trials=1000, oddball_hazard_rate=0.15, sigma=20, change_point_hazard_rate=0.1, seed=42
 )
@@ -217,21 +228,21 @@ random_walk_data = generate_random_walk_environment(
 )
 
 
-### creating Model instances with different parameters
+# ### creating Model instances with different parameters
 
-## 5 nodes (different precisions)
-test_rw_low_p = Weber_model(n_nodes=5, x_4_p=3).input_data(random_walk_data["x"].to_numpy())
-test_cp_low_p = Weber_model(n_nodes=5, x_4_p=3).input_data(change_point_data["x"].to_numpy())
-test_rw_high_p = Weber_model(n_nodes=5).input_data(random_walk_data["x"].to_numpy())
-test_cp_high_p = Weber_model(n_nodes=5).input_data(change_point_data["x"].to_numpy())
+# ## 5 nodes (different precisions) with update_type="eHGF"
+# test_rw_low_p = Weber_model(n_nodes=5, x_4_p=3,update_type="eHGF").input_data(random_walk_data["x"].to_numpy())
+# test_cp_low_p = Weber_model(n_nodes=5, x_4_p=3,update_type="eHGF").input_data(change_point_data["x"].to_numpy())
+# test_rw_high_p = Weber_model(n_nodes=5,update_type="eHGF").input_data(random_walk_data["x"].to_numpy())
+# test_cp_high_p = Weber_model(n_nodes=5,update_type="eHGF").input_data(change_point_data["x"].to_numpy())
 
-## 5 nodes with "standard" as the update type
-test_rw_low_p_s = Weber_model(n_nodes=5, x_4_p=3, update_type="standard").input_data(
-    random_walk_data["x"].to_numpy()
-)
-test_cp_low_p_s = Weber_model(n_nodes=5, x_4_p=3, update_type="standard").input_data(
-    change_point_data["x"].to_numpy()
-)
+# ## 5 nodes with "standard" as the update type
+# test_rw_low_p_s = Weber_model(n_nodes=5, x_4_p=3, update_type="standard").input_data(
+#     random_walk_data["x"].to_numpy()
+# )
+# test_cp_low_p_s = Weber_model(n_nodes=5, x_4_p=3, update_type="standard").input_data(
+#     change_point_data["x"].to_numpy()
+# )
 test_rw_high_p_s = Weber_model(n_nodes=5, update_type="standard").input_data(
     random_walk_data["x"].to_numpy()
 )
@@ -239,11 +250,11 @@ test_cp_high_p_s = Weber_model(n_nodes=5, update_type="standard").input_data(
     change_point_data["x"].to_numpy()
 )
 
-## 4 nodes
-test_rw_4_nodes = Weber_model(n_nodes=4).input_data(random_walk_data["x"].to_numpy())
-test_cp_4_nodes = Weber_model(n_nodes=4).input_data(change_point_data["x"].to_numpy())
+# ## 4 nodes with update_type="eHGF"
+test_rw_4_nodes = Weber_model(n_nodes=4,update_type="eHGF").input_data(random_walk_data["x"].to_numpy())
+test_cp_4_nodes = Weber_model(n_nodes=4,update_type="eHGF").input_data(change_point_data["x"].to_numpy())
 
-## 4 nodes with "standard" as the update type
+# ## 4 nodes with "standard" as the update type
 test_rw_4_nodes_s = Weber_model(n_nodes=4, update_type="standard").input_data(
     random_walk_data["x"].to_numpy()
 )
@@ -251,73 +262,73 @@ test_cp_4_nodes_s = Weber_model(n_nodes=4, update_type="standard").input_data(
     change_point_data["x"].to_numpy()
 )
 
-# ## 3 nodes
-test_rw_3_nodes = Weber_model(n_nodes=3).input_data(random_walk_data["x"].to_numpy())
-test_cp_3_nodes = Weber_model(n_nodes=3).input_data(change_point_data["x"].to_numpy())
+# # ## 3 nodes  with update_type="eHGF"
+# test_rw_3_nodes = Weber_model(n_nodes=3,update_type="eHGF").input_data(random_walk_data["x"].to_numpy())
+# test_cp_3_nodes = Weber_model(n_nodes=3,update_type="eHGF").input_data(change_point_data["x"].to_numpy())
 
-# ##3 nodes with "standard" as update type
-test_rw_3_nodes_s = Weber_model(n_nodes=3, update_type="standard").input_data(
-    random_walk_data["x"].to_numpy()
-)
-test_cp_3_nodes_s = Weber_model(n_nodes=3, update_type="standard").input_data(
-    change_point_data["x"].to_numpy()
-)
+# # ##3 nodes with "standard" as update type
+# test_rw_3_nodes_s = Weber_model(n_nodes=3, update_type="standard").input_data(
+#     random_walk_data["x"].to_numpy()
+# )
+# test_cp_3_nodes_s = Weber_model(n_nodes=3, update_type="standard").input_data(
+#     change_point_data["x"].to_numpy()
+# )
 
 ### comparing the surprises of the test models in the change point environment
-print("comparing the surprises of the test models in the change point environment")
-cp_surprise_comparison = compare_surprise(
-    [
-        test_cp_high_p,
-        test_cp_high_p_s,
-        test_cp_low_p,
-        test_cp_low_p_s,
-        test_cp_4_nodes,
-        test_cp_4_nodes_s,
-        test_cp_3_nodes,
-        test_cp_3_nodes_s,
-    ],
-    [
-        "test_cp_high_p",
-        "test_cp_high_p_s",
-        "test_cp_low_p",
-        "test_cp_low_p_s",
-        "test_cp_4_nodes",
-        "test_cp_4_nodes_s",
-        "test_cp_3_nodes",
-        "test_cp_3_nodes_s",
-    ],
-)
-print(cp_surprise_comparison)
+# print("comparing the surprises of the test models in the change point environment")
+# cp_surprise_comparison = compare_surprise(
+#     [
+#         test_cp_high_p,
+#         test_cp_high_p_s,
+#         test_cp_low_p,
+#         test_cp_low_p_s,
+#         test_cp_4_nodes,
+#         test_cp_4_nodes_s,
+#         test_cp_3_nodes,
+#         test_cp_3_nodes_s,
+#     ],
+#     [
+#         "test_cp_high_p",
+#         "test_cp_high_p_s",
+#         "test_cp_low_p",
+#         "test_cp_low_p_s",
+#         "test_cp_4_nodes",
+#         "test_cp_4_nodes_s",
+#         "test_cp_3_nodes",
+#         "test_cp_3_nodes_s",
+#     ],
+# )
+# print(cp_surprise_comparison)
 #
 ## RESULT
 ## with the current default parameters, that allow the model to properly run with a lower number of nodes, the model with 4 nodes performs the best in regards to total surprise of node 0
 ## using "standard" as the update type prevents the 5 node models from dropping out, they still perform worse than the 4 node model
 
 # ### comparing the surprises of the test models in the random walk environment
-print("comparing the surprises of the test models in the random walk environment")
-rw_surprise_comparison = compare_surprise(
-    [
-        test_rw_low_p,
-        test_rw_low_p_s,
-        test_rw_high_p,
-        test_rw_high_p_s,
-        test_rw_4_nodes,
-        test_rw_4_nodes_s,
-        test_rw_3_nodes,
-        test_rw_3_nodes_s,
-    ],
-    [
-        "test_rw_low_p",
-        "test_rw_low_p_s",
-        "test_rw_high_p",
-        "test_rw_high_p_s",
-        "test_rw_4_nodes",
-        "test_rw_4_nodes_s",
-        "test_rw_3node",
-        "test_rw_3_nodes_s",
-    ],
-)
-print(rw_surprise_comparison)
+# print("comparing the surprises of the test models in the random walk environment")
+# rw_surprise_comparison = compare_surprise(
+#     [
+#         test_rw_low_p,
+#         test_rw_low_p_s,
+#         test_rw_high_p,
+#         test_rw_high_p_s,
+#         test_rw_4_nodes,
+#         test_rw_4_nodes_s,
+#         test_rw_3_nodes,
+#         test_rw_3_nodes_s,
+#     ],
+#     [
+#         "test_rw_low_p",
+#         "test_rw_low_p_s",
+#         "test_rw_high_p",
+#         "test_rw_high_p_s",
+#         "test_rw_4_nodes",
+#         "test_rw_4_nodes_s",
+#         "test_rw_3node",
+#         "test_rw_3_nodes_s",
+#     ],
+# )
+# print(rw_surprise_comparison)
 # #
 # ## RESULT
 # ## with the current default parameters, that allow the model to properly run with a lower number of nodes, the model with 4 nodes and "standard" update type performs the best in regards to total surprise of node 0
@@ -326,12 +337,12 @@ print(rw_surprise_comparison)
 
 # ## comparing the surprise of the 4 node model across environments and update-types
 #
-print("comparing the surprise of the 4 node model across environments and update-types")
-surprise_comparison_4n = compare_surprise(
-    [test_rw_4_nodes, test_rw_4_nodes_s, test_cp_4_nodes, test_cp_4_nodes_s],
-    ["test_rw_4_nodes", "test_rw_4_nodes_s", "test_cp_4_nodes", "test_cp_4_nodes_s"],
-)
-print(surprise_comparison_4n)
+# print("comparing the surprise of the 4 node model across environments and update-types")
+# surprise_comparison_4n = compare_surprise(
+#     [test_rw_4_nodes, test_rw_4_nodes_s, test_cp_4_nodes, test_cp_4_nodes_s],
+#     ["test_rw_4_nodes", "test_rw_4_nodes_s", "test_cp_4_nodes", "test_cp_4_nodes_s"],
+# )
+# print(surprise_comparison_4n)
 #
 # ## RESULT
 # ## Best performance in random walk environment if update-type is "standard" (6538), if using the default one model performs better in Change point environment (seed 42: 6831 vs. 7047)
@@ -379,16 +390,16 @@ print(surprise_comparison_4n)
 # ## 5 nodes with "standard" as the update type
 # test_rw_low_p_s.plot_trajectories()
 # test_cp_low_p_s.plot_trajectories()
-# test_rw_high_p_s.plot_trajectories()
-# test_cp_high_p_s.plot_trajectories()
+test_rw_high_p_s.plot_trajectories()
+test_cp_high_p_s.plot_trajectories()
 
 # ## 4 nodes
-# test_rw_4_nodes.plot_trajectories()
-# test_cp_4_nodes.plot_trajectories()
+test_rw_4_nodes.plot_trajectories()
+test_cp_4_nodes.plot_trajectories()
 
 # ## 4 nodes with "standard" as the update type
-# test_rw_4_nodes_s.plot_trajectories()
-# test_cp_4_nodes_s.plot_trajectories()
+test_rw_4_nodes_s.plot_trajectories()
+test_cp_4_nodes_s.plot_trajectories()
 
 # ## 3 nodes
 # test_rw_3_nodes.plot_trajectories()
@@ -433,6 +444,63 @@ print(surprise_comparison_4n)
 # mean_and_jump_comp_hp_lp = comparing_mean_jumps(test_rw_low_p,test_rw_high_p, ["Low precision", "High precision"])
 # # saving to csv to ease inspection
 # mean_and_jump_comp_hp_lp.to_csv("hp_lp_jump_comp.csv")
+
+
+# ### comparing performance of 5 node network with "standard", a 4 node network with "standard" and 4 node with "eHGF" across many instantiations of environments (500 trials each)
+rw_5_surprises=[]
+rw_s_surprises=[]
+rw_e_surprises=[]
+
+cp_5_surprises=[]
+cp_s_surprises=[]
+cp_e_surprises=[]
+
+for i in range(100):
+    current_cp = generate_change_point_environment(n_trials=500, oddball_hazard_rate=0.15, sigma=20, change_point_hazard_rate=0.1,seed=i)["x"].to_numpy()
+    current_rw = generate_random_walk_environment(n_trials=500, oddball_hazard_rate=0.15, sigma=20,seed=i)["x"].to_numpy()
+
+    rw_5_model = Weber_model(n_nodes=5).input_data(current_rw)
+    rw_s_model = Weber_model().input_data(current_rw)
+    rw_e_model = Weber_model(update_type="eHGF").input_data(current_rw)
+
+    cp_5_model = Weber_model(n_nodes=5).input_data(current_cp)
+    cp_s_model = Weber_model().input_data(current_cp)
+    cp_e_model = Weber_model(update_type="eHGF").input_data(current_cp)
+
+    comp = compare_surprise(
+        [rw_5_model, rw_s_model, rw_e_model, cp_5_model, cp_s_model, cp_e_model],
+        ["rw_5_model","rw_s_model","rw_e_model", "cp_5_model", "cp_s_model", "cp_e_model"]
+    )
+    rw_5_surprises.append(comp.iloc[0,1])
+    rw_s_surprises.append(comp.iloc[1,1])
+    rw_e_surprises.append(comp.iloc[2,1])
+    cp_5_surprises.append(comp.iloc[3,1])
+    cp_s_surprises.append(comp.iloc[4,1])
+    cp_e_surprises.append(comp.iloc[5,1])
+
+surprise_comparison_across_instances = pd.DataFrame({"rw_5": rw_5_surprises,"rw_s":rw_s_surprises, "rw_e":rw_e_surprises,"cp_5":cp_5_surprises ,"cp_s": cp_s_surprises, "cp_e": cp_e_surprises})
+surprise_comparison_across_instances.to_csv("s_c_a_i.csv")
+# ## RESULT
+# # although removing node 5 lead to better performance initially, there are still cases in which the model drops out. 
+# # while the "standard" update type seems to prevent drop outs, this is no quarantee that it could not happen in even more volatile environments.
+
+### Directly comparing the performance of the 5 node model with "standard" update type to the 4 node model of the same type
+
+cmap = plt.get_cmap("Blues")
+colors = cmap(np.linspace(0,1,6))
+fig,ax = plt.subplots()
+ax.set_ylabel("Summed surprise of node 0")
+
+bplot = ax.boxplot(
+    [rw_5_model, rw_s_model, cp_5_model, cp_s_model],
+    tick_labels=["RW 5 nodes", "RW 4 nodes", "CP 5 nodes","CP 4 nodes"],
+    patch_artist=True,
+    showfliers=False
+)
+for patch,color in zip(bplot["boxes"],colors):
+    patch.set_facecolor(color)
+
+plt.show()
 
 
 # ### saving stuff trajectories into csvs to ease inspection
