@@ -183,9 +183,9 @@ def save_param_results(results: dict, env_type: str, filename: str) -> None:
             "f_best": res["f_best"],
         }
         # store raw theta as separate columns
-        theta = res["theta_best"]
-        for i, val in enumerate(theta):
-            rec[f"theta_{i}"] = float(val)
+        #theta = res["theta_best"]
+        #for i, val in enumerate(theta):
+            #rec[f"theta_{i}"] = float(val)
         # add decoded parameters with names
         for k, v in res["decoded"].items():
             rec[k] = float(v)
@@ -234,28 +234,9 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
         "verb_disp": 100,
     }
 
-    # cma_params_hgf = {
-    #     # have parameters: mu1_init, sig1_init, mu2_init, sig2_init, eta, s
-    #     # --> which ones to optimize?
-    #     # initial guess: log_eta, log_s, mu2_0, log_sig2_0
-    #     "x0": [
-    #         np.log(0.01), 
-    #         np.log(15.0**2), 
-    #         -4.0, 
-    #         np.log(1.0)
-    #         ],
-    #     "bounds": (
-    #         [np.log(1e-5), np.log(1.0), -10.0, np.log(1e-3)],   # lower
-    #         [np.log(1.0),  np.log(1e4),  10.0, np.log(1e2)],    # upper
-    #     ),
-    #     "sigma0": 0.5,  # initial global step-size
-    #     "maxfevals": 5000,  # maximum number of function evaluations
-    #     "verb_disp": 100,  # verbosity level
-    # }
-
     cma_params_hgf = {
         "x0": [
-            0.0,             # mu1_0
+            250.0,             # mu1_0
             np.log(10.0),    # sig1_0 (variance)
             -4.0,            # mu2_0
             np.log(1.0),     # sig2_0 (variance)
@@ -264,7 +245,7 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
         ],
         "bounds": (
             [  # lower
-                -50.0,            # mu1_0
+                0.0,              # mu1_0
                 np.log(1e-3),     # sig1_0
                 -10.0,            # mu2_0
                 np.log(1e-3),     # sig2_0
@@ -272,7 +253,7 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
                 np.log(1.0),      # s
             ],
             [  # upper
-                50.0,             # mu1_0
+                500.0,            # mu1_0
                 np.log(1e3),      # sig1_0
                 10.0,             # mu2_0
                 np.log(1e3),      # sig2_0
@@ -286,21 +267,24 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
     }
 
     cma_params_weber = {
-        "x0": [np.log(3.0), np.log(5.0), np.log(5.0)],  # initial guesses
+        "x0": [
+            np.log(5.0), # tonic volatility of node 0
+            15, # initial mean of node 2 (volatility parent)
+            40 # initial mean of node 3
+        ],  
         "bounds": (
-            [np.log(0.1), np.log(0.1), np.log(0.1)],    # lower
-            [np.log(100.0), np.log(100.0), np.log(100.0)],  # upper
+            [np.log(0.1), 0.0, 0.0],    # lower
+            [np.log(100.0), 40.0, 80.0],  # upper
         ),
         "sigma0": 0.5,  # initial global step-size
-        "maxfevals": 5000,  # maximum number of function evaluations
+        "maxfevals": 3000,  # maximum number of function evaluations
         "verb_disp": 100,  # verbosity level
     }
 
-    # TODO: auskommentiert for testing, toggle that back when done
     cma_optimization_params = {
-        #ChangePointModelVariational: cma_params_cmp,
+        ChangePointModelVariational: cma_params_cmp,
         HGFPaper2Gaussian: cma_params_hgf,
-        #WeberModel: cma_params_weber,
+        WeberModel: cma_params_weber,
     }
 
     logger.info("Optimizing models on Change Point Environments")
@@ -309,8 +293,7 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
     for model_name, result in cp_results.items():
         logger.info(f"  {model_name}: {result}")
 
-    # TODO: adjust filename to reflect which models were optimized, e.g. "cma_params_changepoint_cmp.csv"
-    save_param_results(cp_results, "changepoint", "cma_params_changepoint_hgf.csv")
+    save_param_results(cp_results, "changepoint", "cma_params_changepoint.csv")
 
     logger.info("\nOptimizing models on Random Walk Environments")
     rw_results = cma_optimization(cma_optimization_params, rw_envs, seed=seed)
@@ -318,7 +301,7 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
     for model_name, result in rw_results.items():
         logger.info(f"  {model_name}: {result}")
 
-    save_param_results(rw_results, "randomwalk", "cma_params_randomwalk_hgf.csv")
+    save_param_results(rw_results, "randomwalk", "cma_params_randomwalk.csv")
 
     return cp_results, rw_results
 
