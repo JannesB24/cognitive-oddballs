@@ -112,7 +112,8 @@ class HGFPaper2Gaussian(Model):
         # ----------- Prediction -----------------
         # Level 2
         mu2_prev = self.mu2
-        sig2_prev = max(self.sig2 + self.cfg.eta, minvar)
+        sig2_prev_post = self.sig2
+        sig2_hat = max(self.sig2_prev_post + self.cfg.eta, minvar)
 
         # Level 1
         omega = exp_clip(mu2_prev, self.cfg.exp_clip_value)
@@ -142,7 +143,7 @@ class HGFPaper2Gaussian(Model):
         r = (omega - sig1_prev) / den1
 
         # precision
-        pi2 = (1.0 / sig2_prev) + 0.5 * k * (k + r * delta2)
+        pi2 = (1.0 / sig2_hat) + 0.5 * k * (k + r * delta2) # eta already added
 
         # ---- clamps (NUMERICAL STABILITY) ----
         min_pi2 = 1e-6  # floor on precision (avoids huge sig2)
@@ -162,11 +163,7 @@ class HGFPaper2Gaussian(Model):
             mu1_prev=mu1_prev,
             sigma1_prev=sig1_prev,
             mu2_prev=mu2_prev,
-            sigma2_prev=sig2_prev,
-            mu1_new=mu1_new,
-            sigma1_new=sig1_new,
-            mu2_new=mu2_new,
-            sigma2_new=sig2_new,
+            sigma2_prev=sig2_prev_post,
         )
 
         # Log - append row to DataFrame
@@ -177,7 +174,7 @@ class HGFPaper2Gaussian(Model):
             "mu1": self.mu1,
             "sig1": self.sig1,
             "mu2_hat": mu2_prev,
-            "sig2_hat": sig2_prev,
+            "sig2_hat": sig2_hat,
             "mu2": self.mu2,
             "sig2": self.sig2,
             "omega": omega,
@@ -190,7 +187,7 @@ class HGFPaper2Gaussian(Model):
         }
 
         self.history = pd.concat([self.history, pd.DataFrame([row_data])], ignore_index=True)
-
+    
     def calc_variational_free_energy(
         self,
         observation: float,
@@ -198,31 +195,99 @@ class HGFPaper2Gaussian(Model):
         sigma1_prev: float,
         mu2_prev: float,
         sigma2_prev: float,
-        mu1_new: float,
-        sigma1_new: float,
-        mu2_new: float,
-        sigma2_new: float,
     ) -> float:
-        """Approximate variational free energy for the current update step using the 
-        Markovic & Kiebel (2016) Eq.(29) as a guide."""
-        minvar = self.cfg.min_var 
-        s = self.cfg.s
+        term_a = np.log(self.cfg.s)
+        term_a *= -0.5
 
-        den1 = max(sigma1_prev + exp_clip(mu2_prev, self.cfg.exp_clip_value), minvar)
-        den2 = max(sigma2_prev + self.cfg.eta, minvar)
+        term_b = (self.sig1 + ((observation - self.mu1) ** 2)) / self.cfg.s
+        term_b *= -0.5
 
-        term1 = -0.5 * np.log(s)
-        term2 = -0.5 * den1 / s
-        term3 = -0.5 * np.log(den1)
-        term4 = 0.5 * (sigma1_new + (mu1_new - mu1_prev) ** 2) / den1
-        term5 = 0.5 * np.log(den2)
-        term6 = 0.5 * (sigma2_new + (mu2_new - mu2_prev) ** 2) / den2
-        term7 = -0.5 * np.log(2.0 *np.pi)
-        term8 = -0.5 * np.log(max(sigma1_new, minvar))
-        term9 = 0.5 * np.log(max(sigma2_new, minvar))
+        term_c = np.log(sigma1_prev + exp_clip(self.mu2, self.cfg.exp_clip_value))
+        term_c *= -0.5
 
-        vfe =  term1 + term2 + term3 + term4 + term5 + term6 + term7 + term8 + term9
-        return float(vfe)
+        term_d = (self.sig1 + (self.mu1 - mu1_prev) ** 2) / (
+            sigma1_prev + exp_clip(self.mu2, self.cfg.exp_clip_value)
+        )
+        term_d *= -0.5
+
+        term_e = np.log(sigma2_prev + self.cfg.eta)
+        term_e *= -0.5
+
+        term_f = (self.sig2 + (self.mu2 - mu2_prev) ** 2) / (sigma2_prev + self.cfg.eta)
+        term_f *= -0.5
+
+        term_g = np.log(2 * np.pi)
+        term_g *= -0.5
+
+        term_h = 1
+
+        minvar = self.cfg.min_var
+        term_i = np.log(max(self.sig1, minvar)) + np.log(max(self.sig2, minvar))
+        term_i *= 0.5
+
+        free_energy = term_a + term_b + term_c + term_d + term_e + term_f + term_g + term_h + term_i
+
+        return free_energy
+
+    def calc_variational_free_energy_2(
+        self,
+        observation: float,
+        mu1_prev: float,
+        sigma1_prev: float,
+        mu2_prev: float,
+        sigma2_prev: float,
+    ) -> float:
+        """
+        Calculate variational free energy for the current state.
+
+        LLM interpretation of calc_variational_free_energy to be more readable.
+
+        VFE = -0.5 * [
+            log(s) + (sig1 + (o - mu1)^2) / s +
+            log(sig1_prev + exp(mu2)) + (sig1 + (mu1 - mu1_prev)^2) / (sig1_prev + exp(mu2)) +
+            log(sig2_prev + eta) + (sig2 + (mu2 - mu2_prev)^2) / (sig2_prev + eta) +
+            log(2π)
+        ] + 1 + 0.5 * log(sig1) * sig2
+        """
+        # Observation likelihood term
+        obs_log_var = np.log(self.cfg.s)
+        obs_precision = (self.sig1 + (observation - self.mu1) ** 2) / self.cfg.s
+
+        # Level 1 prior term
+        omega = exp_clip(self.mu2, self.cfg.exp_clip_value)
+        l1_var = sigma1_prev + omega
+        l1_log_var = np.log(l1_var)
+        l1_precision = (self.sig1 + (self.mu1 - mu1_prev) ** 2) / l1_var
+
+        # Level 2 prior term
+        l2_var = sigma2_prev + self.cfg.eta
+        l2_log_var = np.log(l2_var)
+        l2_precision = (self.sig2 + (self.mu2 - mu2_prev) ** 2) / l2_var
+
+        # Constant term
+        log_2pi = np.log(2 * np.pi)
+
+        # Entropy term
+        minvar = self.cfg.min_var
+        entropy = 0.5 * (np.log(max(self.sig1, minvar)) + np.log(max(self.sig2, minvar)))
+
+        # Combine all terms
+        free_energy = (
+            -0.5
+            * (
+                obs_log_var
+                + obs_precision
+                + l1_log_var
+                + l1_precision
+                + l2_log_var
+                + l2_precision
+                + log_2pi
+            )
+            + 1
+            + entropy
+        )
+
+        return free_energy
 
     
     # ----------- Model Interface -----------
@@ -237,11 +302,11 @@ class HGFPaper2Gaussian(Model):
         initial_data = {
             "o": 0.0,
             "mu1_hat": self.cfg.mu1_0,
-            "sig1_hat": self.cfg.sig1_0,
+            "sig1_hat": self.cfg.sig1_0 + self.cfg.eta,  # initial prediction includes process noise
             "mu1": self.cfg.mu1_0,
             "sig1": self.cfg.sig1_0,
             "mu2_hat": self.cfg.mu2_0,
-            "sig2_hat": self.cfg.sig2_0,
+            "sig2_hat": self.cfg.sig2_0 + self.cfg.eta,
             "mu2": self.cfg.mu2_0,
             "sig2": self.cfg.sig2_0,
             "omega": exp_clip(self.cfg.mu2_0, self.cfg.exp_clip_value),
