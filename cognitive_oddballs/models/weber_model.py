@@ -11,7 +11,7 @@ logging.getLogger("jax._src").setLevel(logging.INFO)
 class WeberModel(Network, Model):
     def __init__(
         self, n_nodes=4, x_0_tv=5, x_2_mu=15, x_3_mu=40, x_4_p=1e1, update_type="standard"
-    ):
+    ):  # paramteres to maybe add: node precisions, tonic volatilities, initial means for node 3 and 4 (if 4 is kept)
         """A subclass of the pyhfg Network class.
         Each Instance is a set network of 3 to 5 Nodes (4th and 5th node can be left out for
         experimental purposes):
@@ -33,12 +33,12 @@ class WeberModel(Network, Model):
 
 
         """
-        self.initial_means = [250, 250, x_2_mu, x_3_mu]
+        self.inital_means = [250, 250, x_2_mu, x_3_mu]
 
         # if n_nodes is not in specified range, a value error is raised
         if n_nodes < 3 or n_nodes > 5:
             raise ValueError("n_nodes must be between 3 and 5 (inclusive)")
-        
+
         # passing the update type to the Init function of the Network class
         super().__init__(update_type=update_type)
         # Node 0: Observation node/ Continuous input node
@@ -70,6 +70,7 @@ class WeberModel(Network, Model):
         cols = [
             "x_0_expected_mean",
             "x_0_prediction_error",
+            # "x_0_surprise",
             "total_surprise",
         ]
 
@@ -128,10 +129,7 @@ class WeberModel(Network, Model):
         self.node_trajectories = {}
         self.predictions = {}
         self.last_attributes = None
-        
-        # self.set_node_parameter(self.idx_0, "tonic_volatility", np.exp(theta[0]))
-        # self.set_node_parameter(self.idx_2, "mean", theta[1])
-        # self.set_node_parameter(self.idx_3, "mean", theta[2])
+
     
     def objective_cma(self, observations):
         """

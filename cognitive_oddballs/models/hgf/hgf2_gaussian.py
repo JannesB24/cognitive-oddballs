@@ -47,7 +47,7 @@ class HGF2Config:
         if self.sig2_0 < self.min_var:
             raise ValueError(f"sig2_0 must be >= {self.min_var}")
 
-    
+
 class HGFPaper2Gaussian(Model):
     """
     2-level Gaussian HGF as in Markovic & Kiebel (2016):
@@ -65,7 +65,7 @@ class HGFPaper2Gaussian(Model):
         mu2_init: float = -4.0,
         sig2_init: float = 1.0,
         min_var: float = 1e-8,
-        exp_clip_value: float = 60.0,
+        exp_clip_value: float = 30.0,
     ):
         self.cfg = HGF2Config(
             mu1_0=float(mu1_init),
@@ -335,3 +335,118 @@ class HGFPaper2Gaussian(Model):
             "log_eta": log_eta,
             "log_s": log_s,
         }
+
+    # ---------- Plotting (adapted from plot_results in hgf/hgf3.py) ----------
+    def plot_results(
+        self,
+        true_x1: Iterable[Number] | None = None,
+        true_x2: Iterable[Number] | None = None,
+    ):
+        trials = np.arange(len(self.history))
+        fig, axes = plt.subplots(4, 1, figsize=(12, 12))
+
+        # 1) Observations vs inferred state (mu1)
+        ax = axes[0]
+        ax.plot(trials, self.history["o"].values, label="o (observation)", linewidth=1)
+        ax.plot(trials, self.history["mu1"].values, label="mu1 (prediction)", linewidth=2)
+
+        if true_x1 is not None:
+            ax.plot(trials, list(true_x1), label="true x1", linewidth=1)
+
+        ax.set_ylabel("Observation / state")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+        # 2) State uncertainty (sig1)
+        ax = axes[1]
+        mu1 = self.history["mu1"].values
+        sig1 = np.maximum(self.history["sig1"].values, 0.0)
+        ax.plot(trials, mu1, label="mu1", linewidth=2)
+        ax.fill_between(trials, mu1 - np.sqrt(sig1), mu1 + np.sqrt(sig1), alpha=0.2)
+        ax.set_ylabel("Level 1: x1 belief")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+        # 3) Volatility belief (mu2) + omega = exp(mu2_prev)
+        ax = axes[2]
+        mu2 = self.history["mu2"].values
+        sig2 = np.maximum(self.history["sig2"].values, 0.0)
+        ax.plot(trials, mu2, label="mu2 (volatility belief)", linewidth=2)
+        ax.fill_between(trials, mu2 - np.sqrt(sig2), mu2 + np.sqrt(sig2), alpha=0.2)
+
+        if true_x2 is not None:
+            ax.plot(trials, list(true_x2), label="true x2", linewidth=1)
+
+        ax.set_ylabel("Level 2: x2 belief")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+        # 4) Learning rate alpha1 + delta2 (diagnostics)
+        ax = axes[3]
+        ax.plot(trials, self.history["alpha1"].values, label="alpha1 (learning rate)", linewidth=2)
+        ax.plot(trials, self.history["delta2"].values, label="delta2 (volatility PE)", linewidth=1)
+        ax.set_ylabel("Diagnostics")
+        ax.set_xlabel("Trial")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        return fig
+
+
+# ============================================================
+# Sanity test: simulate data from the paper generative model
+# ============================================================
+
+
+def simulate_paper_environment(
+    duration: int = 320,
+    eta_true: float = 0.05,
+    s_true: float = 15.0**2,
+    x2_baseline: float = -4.0,
+    burst_every: int = 100,
+    burst_len: int = 8.0,
+    burst_add: float = 0.7,
+    seed: int = 42,
+):
+    rng = np.random.default_rng(seed)
+
+    x2 = np.zeros(duration, dtype=float)
+    x1 = np.zeros(duration, dtype=float)
+
+    x2[0] = x2_baseline
+    x1[0] = 0.0
+
+    for t in range(1, duration):
+        x2[t] = x2[t - 1] + np.sqrt(eta_true) * rng.standard_normal()
+
+        if burst_every > 0 and (t % burst_every) < burst_len:
+            x2[t] += burst_add
+
+        # step std = exp(x2/2)
+        x1[t] = x1[t - 1] + np.exp(x2[t] / 2.0) * rng.standard_normal()
+
+    o = x1 + np.sqrt(s_true) * rng.standard_normal(duration)
+    return o, x1, x2
+
+
+def _demo_paper_hgf2():
+    o, x1_true, x2_true = simulate_paper_environment()
+
+    model = HGFPaper2Gaussian(
+        eta=0.02,
+        s=225.0,
+        mu1_init=0.0,
+        sig1_init=25.0,
+        mu2_init=-4.0,
+        sig2_init=1.5,
+        min_var=1e-8,
+        exp_clip_value=30.0,
+    )
+    model.run(o)
+    model.plot_results(true_x1=x1_true, true_x2=x2_true)
+    plt.show()
+
+
+if __name__ == "__main__":
+    _demo_paper_hgf2()

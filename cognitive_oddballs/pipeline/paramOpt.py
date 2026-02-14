@@ -267,7 +267,15 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
 
     return cp_results, rw_results
 
-    
+if __name__ == "__main__":
+    set_seed(42)
+
+    logging.basicConfig(
+        level=logging.INFO,  
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+
+    param_results_cp, param_results_rw = run_param_optimization(n_envs=7, n_trials=100, seed=42) # Adjust to 1000, 100 to match Markovic and Kiebel (2016)
 
     
 
