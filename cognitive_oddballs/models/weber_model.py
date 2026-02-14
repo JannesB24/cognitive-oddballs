@@ -33,7 +33,7 @@ class WeberModel(Network, Model):
 
 
         """
-        self.inital_means = [250, 250, x_2_mu, x_3_mu]
+        self.initial_means = [250, 250, x_2_mu, x_3_mu]
 
         # if n_nodes is not in specified range, a value error is raised
         if n_nodes < 3 or n_nodes > 5:
@@ -76,9 +76,9 @@ class WeberModel(Network, Model):
 
         output = self.to_pandas()[cols]
 
-        inital_row = pd.DataFrame(
+        initial_row = pd.DataFrame(
             {
-                "x_0_expected_mean": self.inital_means[0],
+                "x_0_expected_mean": self.initial_means[0],
                 "x_0_prediction_error": 0.0,
                 # "x_0_surprise": 0.0,
                 "total_surprise": 0.0,
@@ -86,7 +86,7 @@ class WeberModel(Network, Model):
             index=[0],
         )
 
-        output = pd.concat([inital_row, output], ignore_index=True)
+        output = pd.concat([initial_row, output], ignore_index=True)
 
         # output["total_free_energy"] = -output["x_0_surprise"]
         output["variational_free_energy"] = -output["total_surprise"]

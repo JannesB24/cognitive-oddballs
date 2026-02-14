@@ -113,7 +113,7 @@ class HGFPaper2Gaussian(Model):
         # Level 2
         mu2_prev = self.mu2
         sig2_prev_post = self.sig2
-        sig2_hat = max(self.sig2_prev_post + self.cfg.eta, minvar)
+        sig2_hat = max(sig2_prev_post + self.cfg.eta, minvar)
 
         # Level 1
         omega = exp_clip(mu2_prev, self.cfg.exp_clip_value)
@@ -196,24 +196,31 @@ class HGFPaper2Gaussian(Model):
         mu2_prev: float,
         sigma2_prev: float,
     ) -> float:
-        term_a = np.log(self.cfg.s)
+        
+        minvar = self.cfg.min_var
+        s = max(self.cfg.s, minvar)
+        sig1 = max(self.sig1, minvar)
+        sig2 = max(self.sig2, minvar)
+
+        v1 = max(sigma1_prev + exp_clip(self.mu2, self.cfg.exp_clip_value), minvar)
+        v2 = max(sigma2_prev + self.cfg.eta, minvar)
+
+        term_a = np.log(s)
         term_a *= -0.5
 
-        term_b = (self.sig1 + ((observation - self.mu1) ** 2)) / self.cfg.s
+        term_b = (self.sig1 + ((observation - self.mu1) ** 2)) / s
         term_b *= -0.5
 
-        term_c = np.log(sigma1_prev + exp_clip(self.mu2, self.cfg.exp_clip_value))
+        term_c = np.log(v1)
         term_c *= -0.5
 
-        term_d = (self.sig1 + (self.mu1 - mu1_prev) ** 2) / (
-            sigma1_prev + exp_clip(self.mu2, self.cfg.exp_clip_value)
-        )
+        term_d = (sig1 + (self.mu1 - mu1_prev) ** 2) / v1
         term_d *= -0.5
 
-        term_e = np.log(sigma2_prev + self.cfg.eta)
+        term_e = np.log(v2)
         term_e *= -0.5
 
-        term_f = (self.sig2 + (self.mu2 - mu2_prev) ** 2) / (sigma2_prev + self.cfg.eta)
+        term_f = (self.sig2 + (self.mu2 - mu2_prev) ** 2) / v2
         term_f *= -0.5
 
         term_g = np.log(2 * np.pi)
@@ -221,71 +228,10 @@ class HGFPaper2Gaussian(Model):
 
         term_h = 1
 
-        minvar = self.cfg.min_var
-        term_i = np.log(max(self.sig1, minvar)) + np.log(max(self.sig2, minvar))
+        term_i = np.log(max(sig1, minvar)) + np.log(max(sig2, minvar))
         term_i *= 0.5
 
         free_energy = term_a + term_b + term_c + term_d + term_e + term_f + term_g + term_h + term_i
-
-        return free_energy
-
-    def calc_variational_free_energy_2(
-        self,
-        observation: float,
-        mu1_prev: float,
-        sigma1_prev: float,
-        mu2_prev: float,
-        sigma2_prev: float,
-    ) -> float:
-        """
-        Calculate variational free energy for the current state.
-
-        LLM interpretation of calc_variational_free_energy to be more readable.
-
-        VFE = -0.5 * [
-            log(s) + (sig1 + (o - mu1)^2) / s +
-            log(sig1_prev + exp(mu2)) + (sig1 + (mu1 - mu1_prev)^2) / (sig1_prev + exp(mu2)) +
-            log(sig2_prev + eta) + (sig2 + (mu2 - mu2_prev)^2) / (sig2_prev + eta) +
-            log(2π)
-        ] + 1 + 0.5 * log(sig1) * sig2
-        """
-        # Observation likelihood term
-        obs_log_var = np.log(self.cfg.s)
-        obs_precision = (self.sig1 + (observation - self.mu1) ** 2) / self.cfg.s
-
-        # Level 1 prior term
-        omega = exp_clip(self.mu2, self.cfg.exp_clip_value)
-        l1_var = sigma1_prev + omega
-        l1_log_var = np.log(l1_var)
-        l1_precision = (self.sig1 + (self.mu1 - mu1_prev) ** 2) / l1_var
-
-        # Level 2 prior term
-        l2_var = sigma2_prev + self.cfg.eta
-        l2_log_var = np.log(l2_var)
-        l2_precision = (self.sig2 + (self.mu2 - mu2_prev) ** 2) / l2_var
-
-        # Constant term
-        log_2pi = np.log(2 * np.pi)
-
-        # Entropy term
-        minvar = self.cfg.min_var
-        entropy = 0.5 * (np.log(max(self.sig1, minvar)) + np.log(max(self.sig2, minvar)))
-
-        # Combine all terms
-        free_energy = (
-            -0.5
-            * (
-                obs_log_var
-                + obs_precision
-                + l1_log_var
-                + l1_precision
-                + l2_log_var
-                + l2_precision
-                + log_2pi
-            )
-            + 1
-            + entropy
-        )
 
         return free_energy
 
