@@ -244,9 +244,11 @@ if __name__ == "__main__":
     set_seed(42)
 
     logging.basicConfig(
-        level=logging.DEBUG,  # TODO: switch back to info or warning when done with debugging
+        level=logging.INFO,  
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+
+    param_results_cp, param_results_rw = run_param_optimization(n_envs=7, n_trials=100, seed=42) # Adjust to 1000, 100 to match Markovic and Kiebel (2016)
 
     #results_cp = experiment_changepoint()
     # results_rw = experiment_randomwalk()
@@ -256,7 +258,7 @@ if __name__ == "__main__":
 
     # plot_learning_rate_vs_error(results_rw, "Random-walk oddball environment")
 
-    param_results_cp, param_results_rw = run_param_optimization(n_envs=7, n_trials=100, seed=42) # TODO: adjust back to 1000, 100
+    
 
 #hgf2_gaussian line 142
 

@@ -1,6 +1,4 @@
 """
-Docstring for cognitive_oddballs.pipeline.paramOpt
-
 Perform parameter optimisation for cognitive oddball models using CMA-ES.
 """
 
@@ -36,7 +34,7 @@ logger = logging.getLogger(__name__)
 def generate_environments(environment_generator: Callable, n_envs: int, n_trials: int):
     return [environment_generator(n_trials) for _ in range(n_envs)]
 
-# format cma-es expects
+
 def make_cma_objective(model_cls: type[Model], envs: list[np.ndarray]):
     """
     Returns a function f(theta) suitable for cma.fmin,
@@ -45,6 +43,7 @@ def make_cma_objective(model_cls: type[Model], envs: list[np.ndarray]):
     def obj(theta: np.ndarray) -> float:
         return objective_function_cma_theta(theta, model_cls, envs)
     return obj
+
 
 def objective_function_cma_theta(
     theta: np.ndarray,
@@ -128,7 +127,6 @@ def cma_optimization(cma_params: dict, envs: list[np.ndarray], seed: int = 42):
 
         # decode if available
         decoded = model_cls.decode_cma_theta(theta_best)
-       
 
         results[model_cls.__name__] = {
             "theta_best": theta_best,
@@ -137,37 +135,6 @@ def cma_optimization(cma_params: dict, envs: list[np.ndarray], seed: int = 42):
         }
 
     return results
-        
-# def cma_optimization(cma_params: dict, envs: list[np.ndarray], seed: int = 42):
-#     """
-#     cma_params: dict mapping model class -> dict of CMA config
-#     envs: list of observation arrays (same set used for all models in this call)
-#     """
-#     optimal_thetas = {}
-
-#     for model_cls, params in cma_params.items():
-#         logger.info(f"Optimizing {model_cls.__name__}...")
-
-#         # need objective function with only theta as parameters
-#         objective = make_cma_objective(model_cls, envs)
-
-#         es_result = cma.fmin(
-#             objective,
-#             x0=params["x0"],
-#             sigma0=params["sigma0"], # initial global step-size
-#             options={
-#                 "bounds": params["bounds"],
-#                 "maxfevals": params["maxfevals"], # limit evaluations
-#                 "verb_disp": params["verb_disp"], # verbosity
-#                 # "popsize": 16, # optional: control population size
-#                 "seed": seed, # for reproducibility
-#             },
-#         )
-
-#         theta_best = es_result[0]  # best CMA-ES parameter vector
-#         optimal_thetas[model_cls.__name__] = theta_best
-
-#     return optimal_thetas    
 
 def save_param_results(results: dict, env_type: str, filename: str) -> None:
     """
@@ -182,10 +149,6 @@ def save_param_results(results: dict, env_type: str, filename: str) -> None:
             "model": model_name,
             "f_best": res["f_best"],
         }
-        # store raw theta as separate columns
-        #theta = res["theta_best"]
-        #for i, val in enumerate(theta):
-            #rec[f"theta_{i}"] = float(val)
         # add decoded parameters with names
         for k, v in res["decoded"].items():
             rec[k] = float(v)
@@ -202,7 +165,6 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
     cp_envs = generate_environments(generate_change_point_environment, n_envs, n_trials)
     rw_envs = generate_environments(generate_random_walk_environment, n_envs, n_trials)
 
-    # TODO: Define proper parameter settings for each model
     cma_params_cmp = {
         # [mu0, log_sigma0, log_obs_noise_std, log_w1_std, log_w2_std, logit_h]
         "x0": [

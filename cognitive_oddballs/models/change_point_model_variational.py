@@ -100,10 +100,9 @@ class ChangePointModelVariational(Model):
             self, 
             mu0: float = 250.0, # just needed to put any default parameters here for eval to work. they'll be overwritten anyway - R.
             sigma0: float = 10.0, 
-            # TODO: check names different
-            obs_noise_std: float = 10.0, # TODO: check that this is std dev and not variance, and that it's properly used in the code (squared when needed) - R.
-            w1_std: float = 0.01, # TODO: check that this is std dev and not variance, and that it's properly used in the code (squared when needed) - R.
-            w2_std: float = 100.0,  # TODO: check that this is std dev and not variance, and that it's properly used in the code (squared when needed) - R.
+            obs_noise_std: float = 10.0,
+            w1_std: float = 0.01, 
+            w2_std: float = 100.0,  
             h: float = 0.1, 
             add_second_level: bool =True
         ) -> None:
@@ -469,7 +468,6 @@ class ChangePointModelVariational(Model):
 
         return output
     
-    # TODO: LLM-generated -- verify correctness
     def set_parameters_cma(self, theta: np.ndarray) -> None:
         """
         theta = [mu0, log_sigma0, log_obs_noise, log_w1, log_w2, logit_h]
@@ -483,7 +481,7 @@ class ChangePointModelVariational(Model):
         self.w2_std = float(np.exp(log_w2))
         self.hazard_rate = float(1.0 / (1.0 + np.exp(-logit_h)))  # sigmoid
 
-        # VARIANCE CONVERSION FOR INTERNAL USE
+        # variance conversion for internal use
         self.obs_noise_var = self.obs_noise_std**2
         self.w1_var = self.w1_std**2
         self.w2_var = self.w2_std**2
@@ -529,7 +527,6 @@ class ChangePointModelVariational(Model):
         
         return float(-total_F) # CMA minimizes, so we return negative free energy
 
-    # TODO: LLM-generated -- verify correctness
     @staticmethod
     def decode_cma_theta(theta: np.ndarray) -> dict:
         """
