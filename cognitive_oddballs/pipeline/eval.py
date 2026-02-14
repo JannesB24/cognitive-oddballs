@@ -26,9 +26,6 @@ Evaluation Metrics:
 """
 
 
-# QUESTIONS:
-# Is the Faulcault stuff still relevant?
-
 import json
 from collections.abc import Callable
 from pathlib import Path

@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 class Model(ABC):
-    """Abstract class to define the mode interface."""
+    """Abstract class to define the model interface."""
 
     @abstractmethod
     def run(self, observations: np.ndarray) -> pd.DataFrame:
