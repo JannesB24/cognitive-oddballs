@@ -37,6 +37,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from pyhgf.response import total_gaussian_surprise
+
 from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
 from cognitive_oddballs.models.change_point_model_variational import ChangePointModelVariational
@@ -50,11 +52,6 @@ RESULTS_DIR = PROJECT_ROOT / "results"
 FIGURES_DIR = RESULTS_DIR / "figures"
 
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-
-
-# Utilities
-def set_seed(seed: int = 42):
-    np.random.seed(seed)
 
 
 # Evaluation metrics

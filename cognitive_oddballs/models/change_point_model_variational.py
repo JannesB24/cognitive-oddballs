@@ -17,16 +17,18 @@ Reference:
     Models for Adaptive Learning in Changing Environments. Frontiers in
     Computational Neuroscience, 10, 33.
 """
-
+import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import stats
+from scipy.special import logsumexp
 
 from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
 from cognitive_oddballs.models.model import Model
 
+logger = logging.getLogger(__name__)
 
 class ChangePointModelVariational(Model):
     """
@@ -94,27 +96,26 @@ class ChangePointModelVariational(Model):
     >>> results = model.run()
     >>> print(results[['Trial', 'Belief', 'LearningRate']].head())
     """
-
     def __init__(
-        self,
-        mu0: float,
-        sigma0: float,
-        obs_noise_std: float,  # std dev
-        w1_std: float,  # std dev
-        w2_std: float,  # std dev
-        h: float,
-        add_second_level: bool = True,
-    ) -> None:
-        # Perceptual free parameters
-        self.mu0 = mu0  # μ₀¹ - Initial belief
-        self.sigma0 = sigma0  # σ₀¹ - Initial uncertainty
-        self.obs_noise = obs_noise_std  # s - Observation noise (std dev)
-        self.hazard_rate = h  # h - Hazard rate
+            self, 
+            mu0: float = 250.0, # just needed to put any default parameters here for eval to work. they'll be overwritten anyway - R.
+            sigma0: float = 10.0, 
+            obs_noise_std: float = 10.0,
+            w1_std: float = 0.01, 
+            w2_std: float = 100.0,  
+            h: float = 0.1, 
+            add_second_level: bool =True
+        ) -> None:
+        # ===== Perceptual free parameters =====
+        self.mu0 = float(mu0)  # μ₀¹ - Initial belief
+        self.sigma0 = float(sigma0)  # σ₀¹ - Initial uncertainty
+        self.obs_noise = float(obs_noise_std)  # s - Observation noise (std dev)
+        self.hazard_rate = float(h)  # h - Hazard rate
 
         # STORE STANDARD DEVITAION VALUES
-        self.obs_noise_std = obs_noise_std  # s - Observation noise (std dev)
-        self.w1_std = w1_std  # w₁ - Stability diffusion (std dev)
-        self.w2_std = w2_std  # w₂ - Change-point variance (std dev)
+        self.obs_noise_std = float(obs_noise_std)  # s - Observation noise (std dev)
+        self.w1_std = float(w1_std)  # w₁ - Stability diffusion (std dev)
+        self.w2_std = float(w2_std)  # w₂ - Change-point variance (std dev)
 
         # VARIANCE CONVERSION FOR INTERNAL USE
         self.obs_noise_var = obs_noise_std**2
@@ -151,6 +152,10 @@ class ChangePointModelVariational(Model):
             )
 
         self.history = pd.DataFrame(columns=columns)
+    
+    # helper fct
+    def _sigmoid(x: float) -> float:
+        return 1.0 / (1.0 + np.exp(-x))
 
     # --------------------------------------------------
     # Second-level transformations (for HGF comparability)
@@ -291,11 +296,11 @@ class ChangePointModelVariational(Model):
 
         # 4. Learning rate (ratio of posterior to observation uncertainty)
         alpha = sigma_new / self.obs_noise_std
-        alpha = np.clip(alpha, 0.0, 1.0)  # Ensure valid range
+        alpha = float(np.clip(alpha, 0.0, 1.0))  # Ensure valid range
 
         # 5. Update posterior expectation (delta rule)
         mu_new = mu1_prev + alpha * delta
-        mu_new = np.clip(mu_new, 0, 500)  # Clip to valid screen range
+        mu_new = float(np.clip(mu_new, 0, 500))  # Clip to valid screen range
 
         # 6. Second-level update (if enabled)
         epsilon2 = 0.0
@@ -392,7 +397,7 @@ class ChangePointModelVariational(Model):
 
         return free_energy
 
-    # --------------------------------------------------
+    # -------------------- Interface Methods --------------------------
 
     def run(self, observations: np.ndarray) -> pd.DataFrame:
         """
@@ -421,6 +426,9 @@ class ChangePointModelVariational(Model):
             - Alpha2: Second-level learning rate (α^(2))
             - FreeEnergy: Variational free energy
         """
+        if self.add_second_level:
+            self.mu2 = 0.0
+            self.sigma2 = 1.0
 
         # Initialize history with first trial (no update)
         initial_data = {
@@ -433,7 +441,7 @@ class ChangePointModelVariational(Model):
         }
 
         if self.add_second_level:
-            initial_data.update(
+            initial_data.update( # does that need to be self.history?
                 {
                     "mu2": self.mu2,
                     "epsilon2": 0.0,
@@ -459,6 +467,93 @@ class ChangePointModelVariational(Model):
         output["updates"] = self.history["beliefs"].diff().shift(-1)
 
         return output
+    
+    def set_parameters_cma(self, theta: np.ndarray) -> None:
+        """
+        theta = [mu0, log_sigma0, log_obs_noise, log_w1, log_w2, logit_h]
+        """
+        mu0, log_sigma0, log_s, log_w1, log_w2, logit_h = map(float, theta)
+
+        self.mu0 = mu0
+        self.sigma0 = float(np.exp(log_sigma0))
+        self.obs_noise_std = float(np.exp(log_s))
+        self.w1_std = float(np.exp(log_w1))
+        self.w2_std = float(np.exp(log_w2))
+        self.hazard_rate = float(1.0 / (1.0 + np.exp(-logit_h)))  # sigmoid
+
+        # variance conversion for internal use
+        self.obs_noise_var = self.obs_noise_std**2
+        self.w1_var = self.w1_std**2
+        self.w2_var = self.w2_std**2
+
+        self.mu = self.mu0
+        self.sigma = self.sigma0
+
+        if self.add_second_level:
+            self.mu2 = 0.0
+            self.sigma2 = 1.0
+
+        # reset history
+        self.history = pd.DataFrame(columns=self.history.columns)
+
+
+    def objective_cma(self, observations: np.ndarray) -> float:
+        """
+        CMA-ES objective: negative total variational free energy over the sequence.
+
+        Uses the per-trial free energy computed in 'update' via calc_variational_free_energy
+        and stored in history. We sum (or average) this over all trials to get the objective value.
+
+        CMA minimizes this objective, so we return the negative free energy (or negative average free energy).
+        """
+        # reset state and history for this sequence
+        self.mu = self.mu0
+        self.sigma = self.sigma0
+        if self.add_second_level:
+            self.mu2 = 0.0
+            self.sigma2 = 1.0
+
+        # clear history
+        self.history = pd.DataFrame(columns=self.history.columns)
+
+        # run the full sequency
+        self.run(observations)
+        F = self.history["variational_free_energy"].to_numpy(dtype=float)
+
+        if not np.all(np.isfinite(F)):
+            raise FloatingPointError(f"Non-finite free energy values encountered: {F}")
+
+        total_F = np.sum(F)
+        
+        return float(-total_F) # CMA minimizes, so we return negative free energy
+
+    @staticmethod
+    def decode_cma_theta(theta: np.ndarray) -> dict:
+        """
+        Map CMA parameter vector back to named, interpretable parameters.
+        theta = [mu0, log_sigma0, log_obs_noise, log_w1, log_w2, logit_h]
+        """
+        mu0, log_sigma0, log_s, log_w1, log_w2, logit_h = map(float, theta)
+
+        sigma0 = float(np.exp(log_sigma0))
+        obs_noise = float(np.exp(log_s))
+        w1 = float(np.exp(log_w1))
+        w2 = float(np.exp(log_w2))
+        h = float(1.0 / (1.0 + np.exp(-logit_h)))
+
+        return {
+            "mu0": mu0,
+            "sigma0": sigma0,
+            "obs_noise": obs_noise,
+            "w1": w1,
+            "w2": w2,
+            "hazard_rate": h,
+            "log_sigma0": log_sigma0,
+            "log_obs_noise": log_s,
+            "log_w1": log_w1,
+            "log_w2": log_w2,
+            "logit_h": logit_h,
+        }
 
     # --------------------------------------------------
     # Visualization
@@ -569,12 +664,12 @@ class ChangePointModelVariational(Model):
 
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("Testing ChangePointModel_Variational (CPM 2016 Adjusted)")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("Testing ChangePointModel_Variational (CPM 2016 Adjusted)")
+    logger.info("=" * 60)
 
     # Generate change-point environment
-    print("\n1. Testing with Change-Point Environment...")
+    logger.info("\n1. Testing with Change-Point Environment...")
     df_change_point = generate_change_point_environment(
         n_trials=400, oddball_hazard_rate=0.1, sigma=25, change_point_hazard_rate=0.1, seed=555
     )
@@ -602,20 +697,20 @@ if __name__ == "__main__":
     uncertainties = results_change["Uncertainty"].values[:-1]  # Use uncertainty from previous trial
 
     # Print summary
-    print("\nChange-Point Environment Results:")
-    print(f"  Mean learning rate: {results_change['LearningRate'].mean():.4f}")
-    print(f"  Max learning rate: {results_change['LearningRate'].max():.4f}")
-    print(f"  Mean CPP: {results_change['CPP'].mean():.4f}")
-    print(f"  Max CPP: {results_change['CPP'].max():.4f}")
-    print("\nPerformance Metrics:")
-    print(f"  MAE (mean absolute error): {mae:.4f}")
+    logger.info("\nChange-Point Environment Results:")
+    logger.info(f"  Mean learning rate: {results_change['LearningRate'].mean():.4f}")
+    logger.info(f"  Max learning rate: {results_change['LearningRate'].max():.4f}")
+    logger.info(f"  Mean CPP: {results_change['CPP'].mean():.4f}")
+    logger.info(f"  Max CPP: {results_change['CPP'].max():.4f}")
+    logger.info("\nPerformance Metrics:")
+    logger.info(f"  MAE (mean absolute error): {mae:.4f}")
 
     # Plot
-    print("\nGenerating plots for change-point environment...")
+    logger.info("\nGenerating plots for change-point environment...")
     cpm_model_change.plot_results(results_change)
 
     # Generate random walk environment
-    print("\n2. Testing with Random Walk Environment...")
+    logger.info("\n2. Testing with Random Walk Environment...")
     df_random_walk = generate_random_walk_environment(
         n_trials=400,
         oddball_hazard_rate=0.1,
@@ -647,16 +742,16 @@ if __name__ == "__main__":
     uncertainties = results_walk["Uncertainty"].values[:-1]  # Use uncertainty from previous trial
 
     # Print summary
-    print("\nRandom Walk Environment Results:")
-    print(f"  Mean learning rate: {results_walk['LearningRate'].mean():.4f}")
-    print(f"  Max learning rate: {results_walk['LearningRate'].max():.4f}")
-    print(f"  Mean CPP: {results_walk['CPP'].mean():.4f}")
-    print(f"  Max CPP: {results_walk['CPP'].max():.4f}")
-    print("\nPerformance Metrics:")
-    print(f"  MAE (mean absolute error): {mae:.4f}")
+    logger.info("\nRandom Walk Environment Results:")
+    logger.info(f"  Mean learning rate: {results_walk['LearningRate'].mean():.4f}")
+    logger.info(f"  Max learning rate: {results_walk['LearningRate'].max():.4f}")
+    logger.info(f"  Mean CPP: {results_walk['CPP'].mean():.4f}")
+    logger.info(f"  Max CPP: {results_walk['CPP'].max():.4f}")
+    logger.info("\nPerformance Metrics:")
+    logger.info(f"  MAE (mean absolute error): {mae:.4f}")
 
     # Plot
-    print("\nGenerating plots for random walk environment...")
+    logger.info("\nGenerating plots for random walk environment...")
     cpm_model_walk.plot_results(results_walk)
 
-    print("\nDone!")
+    logger.info("\nDone!")
