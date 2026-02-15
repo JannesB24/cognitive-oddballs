@@ -52,22 +52,14 @@ python -m cognitive_oddballs.main
     * Model recovery using MLE-BIC and Bayesian Inference (Laplace Approximation), as described in Marković & Kiebel (2016).
 
 # Structure
-    * __main.py__
-    * __utils.py__
+* \__main.py__
+* \__utils.py__
 * environments
     * __change_point_oddball.py__: Generate and visualize helicopter change-point environment with occasional oddball bag drops.
     * __changepoint_visualized.py__: ???
     * __random_walk_visualized.py__: ???
     * __random_walk_oddball.py__: Generate and visualize helicopter Gaussian random walk environment with occasional oddball bag drops.
     * __visualizer.py__: Utils to visualize and summarize given helicopter environment in terminal.
-* model_recovery
-    * __main_recov.py__: TBD
-    * __plots.py__: TBD
-    * data
-    * evaluation
-    * experiments
-    * inference
-    * models
 * models
     * __change_point_model_variational.py__: Change-point model with variational inference to allow comparibility to HGFs, as described in Marković & Kiebel (2016). Implements model interface.
     * __change_point_nassar_2016.py__: Normative Bayesian learning model from Nassar et al. (2016) for helicopter task.
@@ -81,8 +73,24 @@ python -m cognitive_oddballs.main
 * pipeline
     * __eval.py__: Pipeline for evaluating given models on oddball task, using RSME and Variational Free Energy as metrics, following Marković & Kiebel (2016).
     * __paramOpt.py__: Pipeline to perform parameter optimization for given models on oddball task using CMA-ES, following Marković & Kiebel (2016).
-    * __recovery.py__: TBD
-    * __recovery2.py__: TBD
+    * __recovery_optimized.py__: script we used to produce the results of the model identification
+        * runs a 2 x 2 x 2 x 2 design experiment and plots confusion matrices and summary statistics
+            * two models: the Hierachical Gaussian Filter (Mathys 2011 version) and the Change-Point Model (Nassar et al. 2016 model
+            with Variational Inference version a la Markovic & Kiebel 2016)
+            * two environments: an random-walk environment with oddballs and a change-point environment with oddballs
+            * two simulation lengths: 100 simulations with 100 trials & 100 simulations with 500 trials
+            * two response noise levels: low response noise (r_sigma = 2) and high response noise (r_sigma = 10)
+        * While many optimisations were applied in this script it still runs 5 to 14+ hours depending on the machine. Optimisations applied:
+            * Numba JIT for inner HGF update loop
+            * Numba JIT for inner CPM update loop
+            * Vectorised belief arrays (no per-trial Python dicts)
+            * Parallel grid search via joblib
+            * Parallel across conditions via joblib
+            * Coarse-to-fine grid refinement
+            * Early termination of hopeless grid points
+            * Analytical Hessian diagonal approximation
+            * Pre-allocated arrays everywhere
+            * Reduced Python object overhead
     * results: Contains results from model eval (.json and figures) and results from parameter optimization. cma_params_{environment}_cpm contains parameter results for only CPM after 500 simulations à 100 trials, cma_params_{environment} contains parameter results after 7 simulations à 100 trials, both conducted using CMA-ES.
 * supplementary_materials
     * __testing_weber_model.py__: Various diagnostic functions for gHGF to test functioning and further development. Comment/uncomment as needed.
