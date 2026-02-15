@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
 
-
 class Model(ABC):
     """Abstract class to define the mode interface."""
 
@@ -17,5 +16,42 @@ class Model(ABC):
 
         Returns:
             pd.DataFrame: Relevant model outputs as a pandas DataFrame.
+
+            The first line corresponds to the initial belief before seeing any observation,
+            therefore the entry at index 1 in "beliefs" corresponds to the belief after seeing
+            the first observation.
         """
+        pass
+
+    @abstractmethod
+    def set_parameters_cma(self, theta: np.ndarray) -> None:
+        """
+        Set model parameters from CMA-ES parameter vector.
+
+        Args:
+            theta (np.ndarray): Parameter vector used by CMA-ES.
+        """
+        pass
+
+    @abstractmethod
+    def objective_cma(self, observations: np.ndarray) -> float:
+        """
+        Compute the scalar objective value for CMA-ES optimization.
+
+        This method should:
+          - run the model on `observations` (internally calling `run`)
+          - compute and return a scalar loss (NLL, VFE, etc.)
+
+        Args:
+            observations (np.ndarray): Input observations for the model.
+
+        Returns:
+            float: Scalar objective to minimize.
+        """
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def decode_cma_theta(theta: np.ndarray) -> dict:
+        """Map theta to a dict of named parameters for reporting."""
         pass
