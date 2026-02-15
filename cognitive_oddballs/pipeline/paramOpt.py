@@ -18,7 +18,6 @@ from cognitive_oddballs.models.change_point_model_variational import ChangePoint
 from cognitive_oddballs.models.hgf.hgf2_gaussian import HGFPaper2Gaussian
 from cognitive_oddballs.models.model import Model
 from cognitive_oddballs.models.weber_model import WeberModel
-from cognitive_oddballs.utils import set_seed
 
 # Configs
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -30,9 +29,12 @@ FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
 logger = logging.getLogger(__name__)
 
+def set_seed(seed: int = 42) -> None:
+    np.random.seed(seed)
+
 # so that we use same environments for each model during optimization
-def generate_environments(environment_generator: Callable, n_envs: int, n_trials: int):
-    return [environment_generator(n_trials) for _ in range(n_envs)]
+def generate_environments(environment_generator: Callable, n_simulations: int, n_trials: int):
+    return [environment_generator(n_trials) for _ in range(n_simulations)]
 
 
 def make_cma_objective(model_cls: type[Model], envs: list[np.ndarray]):
@@ -159,11 +161,11 @@ def save_param_results(results: dict, env_type: str, filename: str) -> None:
     df.to_csv(out_path, index=False)
     logger.info("Saved CMA-ES results to %s", out_path)
 
-def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 42):
+def run_param_optimization(n_simulations: int = 1000, n_trials: int = 100, seed: int = 42):
     set_seed(seed)
 
-    cp_envs = generate_environments(generate_change_point_environment, n_envs, n_trials)
-    rw_envs = generate_environments(generate_random_walk_environment, n_envs, n_trials)
+    cp_envs = generate_environments(generate_change_point_environment, n_simulations, n_trials)
+    rw_envs = generate_environments(generate_random_walk_environment, n_simulations, n_trials)
 
     cma_params_cmp = {
         # [mu0, log_sigma0, log_obs_noise_std, log_w1_std, log_w2_std, logit_h]
@@ -275,7 +277,4 @@ if __name__ == "__main__":
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    param_results_cp, param_results_rw = run_param_optimization(n_envs=7, n_trials=100, seed=42) # Adjust to 1000, 100 to match Markovic and Kiebel (2016)
-
-    
-
+    param_results_cp, param_results_rw = run_param_optimization(n_simulations=7, n_trials=100, seed=42) # Adjust to 1000, 100 to match Markovic and Kiebel (2016).
