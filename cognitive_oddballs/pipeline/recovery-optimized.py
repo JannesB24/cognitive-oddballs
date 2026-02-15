@@ -3,7 +3,19 @@
 Model recovery on oddball tasks — CPU-optimised version
 MLE-BIC vs Bayesian Inference (Laplace Approximation)
 
-Based on Marković & Kiebel (2016)
+Based on methodology by Marković & Kiebel (2016)
+
+
+recovery-optimized.py is the script we used to produce the results of the model identification.
+- runs a 2 x 2 x 2 x 2 design experiment 
+     - two models: the Hierachical Gaussian Filter (Mathys 2011 version) and the Change-Point Model (Nassar et  al. 2016 model with Variational Inference version a la Markovic & Kiebel 2016) 
+     -  two environments: an random-walk environment with oddballs and a change-point environment with oddballs 
+     -  two simulation lengths: 100 simulations with 100 trials & 100 simulations with 500 trials
+     -  two response noise levels: low response noise (r_sigma = 2) and high response noise (r_sigma = 10)
+
+     
+
+While many optimisations were applied in this script it still runs 5 to 14+ hours depending on the machine.
 
 Optimisations applied:
   1.  Numba JIT for inner HGF update loop
@@ -13,7 +25,7 @@ Optimisations applied:
   5.  Parallel across conditions via joblib
   6.  Coarse-to-fine grid refinement
   7.  Early termination of hopeless grid points
-  8.  Analytical Hessian diagonal approximation (optional)
+  8.  Analytical Hessian diagonal approximation
   9.  Pre-allocated arrays everywhere
   10. Reduced Python object overhead
 """
@@ -990,5 +1002,6 @@ if __name__ == "__main__":
 
     # plot
     plot_both_paper_figures(all_cms, model_names)
-
+    plot_overall_summary(simulation_results, model_names)
+    
     print("\n✓ All done.")
