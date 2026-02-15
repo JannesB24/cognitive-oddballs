@@ -1,12 +1,14 @@
+import logging
+
 import numpy as np
 import pandas as pd
-import logging
 from pyhgf.model import Network
 
 from cognitive_oddballs.models.model import Model
 
 logging.getLogger("jax").setLevel(logging.INFO)
 logging.getLogger("jax._src").setLevel(logging.INFO)
+
 
 class WeberModel(Network, Model):
     def __init__(
@@ -63,7 +65,7 @@ class WeberModel(Network, Model):
                 self.add_nodes(volatility_children=3, precision=x_4_p)
                 self.idx_4 = self.n_nodes - 1
 
-    # -------------- Model interface implentation -----------------    
+    # -------------- Model interface implentation -----------------
     def run(self, observations: np.ndarray) -> pd.DataFrame:
         self.input_data(observations)
 
@@ -94,11 +96,11 @@ class WeberModel(Network, Model):
         rename_dict = {
             "x_0_expected_mean": "beliefs",
             "x_0_prediction_error": "prediction_error",
-            #"total_free_energy": "variational_free_energy",
+            # "total_free_energy": "variational_free_energy",
         }
 
         return output.rename(columns=rename_dict)
-    
+
     def set_parameters_cma(self, theta):
         """
         CMA-ES parameterization:
@@ -124,13 +126,12 @@ class WeberModel(Network, Model):
         self.initial_means[2] = x2_mu
         if self.idx_3 is not None:
             self.initial_means[3] = x3_mu
-        
+
         # reset dynamic state
         self.node_trajectories = {}
         self.predictions = {}
         self.last_attributes = None
 
-    
     def objective_cma(self, observations):
         """
         CMA-ES objective: sum of per-trial 'total_surprise'
@@ -143,14 +144,18 @@ class WeberModel(Network, Model):
         trajectories = self.to_pandas()
 
         if "total_surprise" not in trajectories.columns:
-            raise ValueError("total_surprise column not found in trajectories. Check if model is run correctly.")
+            raise ValueError(
+                "total_surprise column not found in trajectories. Check if model is run correctly."
+            )
         s = trajectories["total_surprise"].to_numpy(dtype=np.float64)
 
         if not np.all(np.isfinite(s)):
-            raise ValueError("total_surprise contains non-finite values. Check if model is run correctly and if parameters are in a valid range.")
-        
+            raise ValueError(
+                "total_surprise contains non-finite values. Check if model is run correctly and if parameters are in a valid range."
+            )
+
         return float(np.sum(s))
-    
+
     @staticmethod
     def decode_cma_theta(theta: np.ndarray) -> dict:
         """
@@ -164,7 +169,6 @@ class WeberModel(Network, Model):
             "x3_mu": float(x3_mu),
             "log_x0_tonic_vol": log_x0_tv,
         }
-
 
     # -------------- End of Model interface implentation -----------------
     def to_pandas(self):

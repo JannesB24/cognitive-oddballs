@@ -2,15 +2,13 @@
 Perform parameter optimisation for cognitive oddball models using CMA-ES.
 """
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
-import logging
-
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
 
 import cma
+import numpy as np
+import pandas as pd
 
 from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
@@ -18,7 +16,6 @@ from cognitive_oddballs.models.change_point_model_variational import ChangePoint
 from cognitive_oddballs.models.hgf.hgf2_gaussian import HGFPaper2Gaussian
 from cognitive_oddballs.models.model import Model
 from cognitive_oddballs.models.weber_model import WeberModel
-from cognitive_oddballs.utils import set_seed
 
 # Configs
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -30,9 +27,14 @@ FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
 logger = logging.getLogger(__name__)
 
+
+def set_seed(seed: int = 42) -> None:
+    np.random.seed(seed)
+
+
 # so that we use same environments for each model during optimization
-def generate_environments(environment_generator: Callable, n_envs: int, n_trials: int):
-    return [environment_generator(n_trials) for _ in range(n_envs)]
+def generate_environments(environment_generator: Callable, n_simulations: int, n_trials: int):
+    return [environment_generator(n_trials) for _ in range(n_simulations)]
 
 
 def make_cma_objective(model_cls: type[Model], envs: list[np.ndarray]):
@@ -40,8 +42,10 @@ def make_cma_objective(model_cls: type[Model], envs: list[np.ndarray]):
     Returns a function f(theta) suitable for cma.fmin,
     with model class and environments closed over.
     """
+
     def obj(theta: np.ndarray) -> float:
         return objective_function_cma_theta(theta, model_cls, envs)
+
     return obj
 
 
@@ -49,7 +53,7 @@ def objective_function_cma_theta(
     theta: np.ndarray,
     model_cls: type[Model],
     envs: pd.DataFrame,
-    penalty: float = 1e12,   # big penalty in case of failure
+    penalty: float = 1e12,  # big penalty in case of failure
 ) -> float:
     """
     CMA-ES objective over a set of environments, for a given model class.
@@ -62,12 +66,12 @@ def objective_function_cma_theta(
     total_obj = 0.0
 
     try:
-        for env in envs: # env type: <class 'pandas.core.frame.DataFrame'>
-            #for observations x in env:
+        for env in envs:  # env type: <class 'pandas.core.frame.DataFrame'>
+            # for observations x in env:
             if "x" in env.columns:
                 observations = env["x"].to_numpy(dtype=float)
-            
-                model = model_cls() # fresh model each run
+
+                model = model_cls()  # fresh model each run
                 model.set_parameters_cma(theta)
 
                 obj = model.objective_cma(observations)
@@ -79,11 +83,10 @@ def objective_function_cma_theta(
 
             else:
                 raise ValueError(
-                    f"DataFrame environment has no 'x' column; "
-                    f"columns={list(env.columns)}"
+                    f"DataFrame environment has no 'x' column; columns={list(env.columns)}"
                 )
         return total_obj / len(envs)
-    
+
     except Exception as e:
         msg = (
             f"[CMA safeguard] {model_cls.__name__} failed for theta={theta}: "
@@ -92,7 +95,8 @@ def objective_function_cma_theta(
         logger.warning(msg)
 
         # large penalty so CMA-ES moves away from region
-        return penalty    
+        return penalty
+
 
 def cma_optimization(cma_params: dict, envs: list[np.ndarray], seed: int = 42):
     """
@@ -136,6 +140,7 @@ def cma_optimization(cma_params: dict, envs: list[np.ndarray], seed: int = 42):
 
     return results
 
+
 def save_param_results(results: dict, env_type: str, filename: str) -> None:
     """
     results: output of cma_optimization
@@ -159,36 +164,39 @@ def save_param_results(results: dict, env_type: str, filename: str) -> None:
     df.to_csv(out_path, index=False)
     logger.info("Saved CMA-ES results to %s", out_path)
 
-def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 42):
+
+def run_param_optimization(n_simulations: int = 1000, n_trials: int = 100, seed: int = 42):
     set_seed(seed)
 
-    cp_envs = generate_environments(generate_change_point_environment, n_envs, n_trials)
-    rw_envs = generate_environments(generate_random_walk_environment, n_envs, n_trials)
+    cp_envs = generate_environments(generate_change_point_environment, n_simulations, n_trials)
+    rw_envs = generate_environments(generate_random_walk_environment, n_simulations, n_trials)
 
     cma_params_cmp = {
         # [mu0, log_sigma0, log_obs_noise_std, log_w1_std, log_w2_std, logit_h]
         "x0": [
-            250.0,               # mu0
-            np.log(10.0),        # sigma0
-            np.log(10.0),        # s
-            np.log(0.01),        # w1_std
-            np.log(100.0),       # w2_std
-            np.log(0.1 / 0.9),   # h = 0.1
+            250.0,  # mu0
+            np.log(10.0),  # sigma0
+            np.log(10.0),  # s
+            np.log(0.01),  # w1_std
+            np.log(100.0),  # w2_std
+            np.log(0.1 / 0.9),  # h = 0.1
         ],
         "bounds": (
-            [  0.0,
-            np.log(0.1),      # sigma0_min
-            np.log(1.0),      # s_min
-            np.log(1e-4),     # w1_min
-            np.log(20.0),     # w2_min
-            np.log(0.01 / 0.99),  # logit(h_min)
+            [
+                0.0,
+                np.log(0.1),  # sigma0_min
+                np.log(1.0),  # s_min
+                np.log(1e-4),  # w1_min
+                np.log(20.0),  # w2_min
+                np.log(0.01 / 0.99),  # logit(h_min)
             ],
-            [ 500.0,
-            np.log(100.0),    # sigma0_max
-            np.log(50.0),     # s_max
-            np.log(1.0),      # w1_max
-            np.log(500.0),    # w2_max
-            np.log(0.5 / 0.5),  # logit(h_max) = 0.0
+            [
+                500.0,
+                np.log(100.0),  # sigma0_max
+                np.log(50.0),  # s_max
+                np.log(1.0),  # w1_max
+                np.log(500.0),  # w2_max
+                np.log(0.5 / 0.5),  # logit(h_max) = 0.0
             ],
         ),
         "sigma0": 0.5,
@@ -198,29 +206,29 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
 
     cma_params_hgf = {
         "x0": [
-            250.0,             # mu1_0
-            np.log(10.0),    # sig1_0 (variance)
-            -4.0,            # mu2_0
-            np.log(1.0),     # sig2_0 (variance)
-            np.log(0.005),   # eta
-            np.log(15.0**2), # s
+            250.0,  # mu1_0
+            np.log(10.0),  # sig1_0 (variance)
+            -4.0,  # mu2_0
+            np.log(1.0),  # sig2_0 (variance)
+            np.log(0.005),  # eta
+            np.log(15.0**2),  # s
         ],
         "bounds": (
             [  # lower
-                0.0,              # mu1_0
-                np.log(1e-3),     # sig1_0
-                -10.0,            # mu2_0
-                np.log(1e-3),     # sig2_0
-                np.log(1e-5),     # eta
-                np.log(1.0),      # s
+                0.0,  # mu1_0
+                np.log(1e-3),  # sig1_0
+                -10.0,  # mu2_0
+                np.log(1e-3),  # sig2_0
+                np.log(1e-5),  # eta
+                np.log(1.0),  # s
             ],
             [  # upper
-                500.0,            # mu1_0
-                np.log(1e3),      # sig1_0
-                10.0,             # mu2_0
-                np.log(1e3),      # sig2_0
-                np.log(1.0),      # eta
-                np.log(1e4),      # s
+                500.0,  # mu1_0
+                np.log(1e3),  # sig1_0
+                10.0,  # mu2_0
+                np.log(1e3),  # sig2_0
+                np.log(1.0),  # eta
+                np.log(1e4),  # s
             ],
         ),
         "sigma0": 0.5,
@@ -230,12 +238,12 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
 
     cma_params_weber = {
         "x0": [
-            np.log(5.0), # tonic volatility of node 0
-            15, # initial mean of node 2 (volatility parent)
-            40 # initial mean of node 3
-        ],  
+            np.log(5.0),  # tonic volatility of node 0
+            15,  # initial mean of node 2 (volatility parent)
+            40,  # initial mean of node 3
+        ],
         "bounds": (
-            [np.log(0.1), 0.0, 0.0],    # lower
+            [np.log(0.1), 0.0, 0.0],  # lower
             [np.log(100.0), 40.0, 80.0],  # upper
         ),
         "sigma0": 0.5,  # initial global step-size
@@ -267,15 +275,15 @@ def run_param_optimization(n_envs: int = 1000, n_trials: int = 100, seed: int = 
 
     return cp_results, rw_results
 
+
 if __name__ == "__main__":
     set_seed(42)
 
     logging.basicConfig(
-        level=logging.INFO,  
+        level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    param_results_cp, param_results_rw = run_param_optimization(n_envs=7, n_trials=100, seed=42) # Adjust to 1000, 100 to match Markovic and Kiebel (2016)
-
-    
-
+    param_results_cp, param_results_rw = run_param_optimization(
+        n_simulations=7, n_trials=100, seed=42
+    )  # Adjust to 1000, 100 to match Markovic and Kiebel (2016).
