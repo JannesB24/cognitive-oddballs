@@ -25,7 +25,6 @@ Evaluation Metrics:
     we use RMSE and Variational Free Energy (VFE) as evaluation metrics.
 """
 
-
 import json
 from collections.abc import Callable
 from pathlib import Path
@@ -33,8 +32,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-
-from pyhgf.response import total_gaussian_surprise
 
 from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment

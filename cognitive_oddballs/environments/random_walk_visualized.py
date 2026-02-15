@@ -1,5 +1,5 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 import seaborn as sns
 
 # Reproducibility
@@ -39,41 +39,18 @@ sns.set(style="whitegrid")
 plt.figure(figsize=(12, 6))
 
 # Latent state
-plt.plot(
-    t,
-    latent,
-    color="black",
-    linewidth=2,
-    label="Latent state (random walk)"
-)
+plt.plot(t, latent, color="black", linewidth=2, label="Latent state (random walk)")
 
 # Variance band (± k sigma)
 plt.fill_between(
-    t,
-    latent - k * sigma,
-    latent + k * sigma,
-    color="black",
-    alpha=0.12,
-    label="±3σ band"
+    t, latent - k * sigma, latent + k * sigma, color="black", alpha=0.12, label="±3σ band"
 )
 
 # Normal observations (inside variance)
-sns.scatterplot(
-    x=t[is_normal],
-    y=y[is_normal],
-    color="blue",
-    s=30,
-    label="Normal observations"
-)
+sns.scatterplot(x=t[is_normal], y=y[is_normal], color="blue", s=30, label="Normal observations")
 
 # Oddballs (outside variance)
-sns.scatterplot(
-    x=t[is_oddball],
-    y=y[is_oddball],
-    color="red",
-    s=60,
-    label="Oddballs"
-)
+sns.scatterplot(x=t[is_oddball], y=y[is_oddball], color="red", s=60, label="Oddballs")
 
 plt.xlabel("Time")
 plt.ylabel("Value")
