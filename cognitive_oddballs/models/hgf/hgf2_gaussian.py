@@ -100,11 +100,12 @@ class HGFPaper2Gaussian(Model):
                 "delta1",  # prediction error level 1
                 "alpha1",  # learning rate level 1
                 "delta2",  # prediction error level 2
-                "k","r",    # helpers for PE
+                "k",
+                "r",  # helpers for PE
                 "vfe",  # variational free energy: calculated after update
             ]
         )
-    
+
     def update(self, o: Number) -> None:
         o = float(o)
         minvar = self.cfg.min_var
@@ -143,7 +144,7 @@ class HGFPaper2Gaussian(Model):
         r = (omega - sig1_prev) / den1
 
         # precision
-        pi2 = (1.0 / sig2_hat) + 0.5 * k * (k + r * delta2) # eta already added
+        pi2 = (1.0 / sig2_hat) + 0.5 * k * (k + r * delta2)  # eta already added
 
         # ---- clamps (NUMERICAL STABILITY) ----
         min_pi2 = 1e-6  # floor on precision (avoids huge sig2)
@@ -187,7 +188,7 @@ class HGFPaper2Gaussian(Model):
         }
 
         self.history = pd.concat([self.history, pd.DataFrame([row_data])], ignore_index=True)
-    
+
     def calc_variational_free_energy(
         self,
         observation: float,
@@ -196,7 +197,6 @@ class HGFPaper2Gaussian(Model):
         mu2_prev: float,
         sigma2_prev: float,
     ) -> float:
-        
         minvar = self.cfg.min_var
         s = max(self.cfg.s, minvar)
         sig1 = max(self.sig1, minvar)
@@ -235,7 +235,6 @@ class HGFPaper2Gaussian(Model):
 
         return free_energy
 
-    
     # ----------- Model Interface -----------
     def run(self, observations: np.ndarray) -> pd.DataFrame:
         # reset state & history
@@ -283,10 +282,10 @@ class HGFPaper2Gaussian(Model):
         )
 
         return output
-    
+
     def set_parameters_cma(self, theta: np.ndarray) -> None:
         """
-        CMA-ES parameterisation: 
+        CMA-ES parameterisation:
             theta = [mu1_0, log_sig1_0, mu2_0, log_sig2_0, log_eta, log_s]
         where sig1_0, sig2_0, eta, and s are all variances to ensure positiviy.
         """
@@ -304,7 +303,7 @@ class HGFPaper2Gaussian(Model):
             self.cfg.sig1_0 = self.cfg.min_var
         if self.cfg.sig2_0 < self.cfg.min_var:
             self.cfg.sig2_0 = self.cfg.min_var
-        
+
         # reset state and clear history
         self.mu1 = self.cfg.mu1_0
         self.sig1 = max(self.cfg.sig1_0, self.cfg.min_var)
@@ -324,7 +323,7 @@ class HGFPaper2Gaussian(Model):
         if not np.isfinite(total_vfe).all():
             raise FloatingPointError("Non-finite variational free energy values in HGF: {F}.")
         return -float(total_vfe.sum())
-    
+
     @staticmethod
     def decode_cma_theta(theta: np.ndarray) -> dict:
         """

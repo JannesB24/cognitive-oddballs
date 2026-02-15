@@ -17,18 +17,20 @@ Reference:
     Models for Adaptive Learning in Changing Environments. Frontiers in
     Computational Neuroscience, 10, 33.
 """
+
 import logging
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import stats
-from scipy.special import logsumexp
 
 from cognitive_oddballs.environments.change_point_oddball import generate_change_point_environment
 from cognitive_oddballs.environments.random_walk_oddball import generate_random_walk_environment
 from cognitive_oddballs.models.model import Model
 
 logger = logging.getLogger(__name__)
+
 
 class ChangePointModelVariational(Model):
     """
@@ -96,16 +98,17 @@ class ChangePointModelVariational(Model):
     >>> results = model.run()
     >>> print(results[['Trial', 'Belief', 'LearningRate']].head())
     """
+
     def __init__(
-            self, 
-            mu0: float = 250.0, # just needed to put any default parameters here for eval to work. they'll be overwritten anyway - R.
-            sigma0: float = 10.0, 
-            obs_noise_std: float = 10.0,
-            w1_std: float = 0.01, 
-            w2_std: float = 100.0,  
-            h: float = 0.1, 
-            add_second_level: bool =True
-        ) -> None:
+        self,
+        mu0: float = 250.0,  # just needed to put any default parameters here for eval to work. they'll be overwritten anyway - R.
+        sigma0: float = 10.0,
+        obs_noise_std: float = 10.0,
+        w1_std: float = 0.01,
+        w2_std: float = 100.0,
+        h: float = 0.1,
+        add_second_level: bool = True,
+    ) -> None:
         # ===== Perceptual free parameters =====
         self.mu0 = float(mu0)  # μ₀¹ - Initial belief
         self.sigma0 = float(sigma0)  # σ₀¹ - Initial uncertainty
@@ -152,7 +155,7 @@ class ChangePointModelVariational(Model):
             )
 
         self.history = pd.DataFrame(columns=columns)
-    
+
     # helper fct
     def _sigmoid(x: float) -> float:
         return 1.0 / (1.0 + np.exp(-x))
@@ -441,7 +444,7 @@ class ChangePointModelVariational(Model):
         }
 
         if self.add_second_level:
-            initial_data.update( # does that need to be self.history?
+            initial_data.update(  # does that need to be self.history?
                 {
                     "mu2": self.mu2,
                     "epsilon2": 0.0,
@@ -467,7 +470,7 @@ class ChangePointModelVariational(Model):
         output["updates"] = self.history["beliefs"].diff().shift(-1)
 
         return output
-    
+
     def set_parameters_cma(self, theta: np.ndarray) -> None:
         """
         theta = [mu0, log_sigma0, log_obs_noise, log_w1, log_w2, logit_h]
@@ -496,7 +499,6 @@ class ChangePointModelVariational(Model):
         # reset history
         self.history = pd.DataFrame(columns=self.history.columns)
 
-
     def objective_cma(self, observations: np.ndarray) -> float:
         """
         CMA-ES objective: negative total variational free energy over the sequence.
@@ -524,8 +526,8 @@ class ChangePointModelVariational(Model):
             raise FloatingPointError(f"Non-finite free energy values encountered: {F}")
 
         total_F = np.sum(F)
-        
-        return float(-total_F) # CMA minimizes, so we return negative free energy
+
+        return float(-total_F)  # CMA minimizes, so we return negative free energy
 
     @staticmethod
     def decode_cma_theta(theta: np.ndarray) -> dict:
