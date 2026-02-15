@@ -39,7 +39,7 @@ pip install -r requirements.txt
 
 ## Running Code
 
-Due to the independence and long runtime of many of the components, environment visualization, parameter optimization, model evaluation, and model recovery can only be run separately.
+Due to the independence and long runtime of many of the components, environment visualization, parameter optimization, model evaluation, and model recovery are implemented only to be run separately.
 
 To visualize the Change-point environment, run:
 
@@ -76,23 +76,23 @@ python -m cognitive_oddballs.pipeline.recovery_optimized
 ```
 
 The script runs a 2 x 2 x 2 x 2 design experiment and plots confusion matrices and summary statistics
-    * Two models: the Hierachical Gaussian Filter (Mathys 2011 version) and the Change-Point Model (Nassar et al. 2016 model
-    with Variational Inference version a la Markovic & Kiebel 2016)
-    * Two environments: an random-walk environment with oddballs and a change-point environment with oddballs
-    * Two simulation lengths: 100 simulations with 100 trials & 100 simulations with 500 trials
-    * Two response noise levels: low response noise (r_sigma = 2) and high response noise (r_sigma = 10)
+* Two models: the Hierachical Gaussian Filter (Mathys 2011 version) and the Change-Point Model (Nassar et al. 2016 model
+with Variational Inference version a la Markovic & Kiebel 2016)
+* Two environments: an random-walk environment with oddballs and a change-point environment with oddballs
+* Two simulation lengths: 100 simulations with 100 trials & 100 simulations with 500 trials
+* Two response noise levels: low response noise (r_sigma = 2) and high response noise (r_sigma = 10)
 
 While many optimisations were applied in this script it still runs 5 to 14+ hours depending on the machine. Optimisations applied:
-    * Numba JIT for inner HGF update loop
-    * Numba JIT for inner CPM update loop
-    * Vectorised belief arrays (no per-trial Python dicts)
-    * Parallel grid search via joblib
-    * Parallel across conditions via joblib
-    * Coarse-to-fine grid refinement
-    * Early termination of hopeless grid points
-    * Analytical Hessian diagonal approximation
-    * Pre-allocated arrays everywhere
-    * Reduced Python object overhead
+* Numba JIT for inner HGF update loop
+* Numba JIT for inner CPM update loop
+* Vectorised belief arrays (no per-trial Python dicts)
+* Parallel grid search via joblib
+* Parallel across conditions via joblib
+* Coarse-to-fine grid refinement
+* Early termination of hopeless grid points
+* Analytical Hessian diagonal approximation
+* Pre-allocated arrays everywhere
+* Reduced Python object overhead
 
 
 # Structure
