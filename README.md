@@ -39,43 +39,6 @@ or
 python -m cognitive_oddballs.main
 ```
 
-## ✨ Code Quality with Ruff
-
-This project uses [Ruff](https://docs.astral.sh/ruff/) for linting and code formatting.
-
-### Installation
-
-```bash
-pip install -r requirements-dev.txt
-```
-
-or directly via pip:
-
-```bash
-pip install ruff
-```
-
-### Usage
-
-**Linting:**
-```bash
-ruff check .
-```
-
-**Formatting:**
-```bash
-ruff format .
-```
-
-**Auto-fix issues:**
-```bash
-ruff check --fix .
-```
-
-### ⚙️ Configuration
-
-Ruff is configured in `pyproject.toml` or `ruff.toml` at the project root.
-
 # Features
 * Extensions of Change-point and Gaussian random walk environment to feature oddballs, incl. visualization
 * Model implementations:
@@ -124,3 +87,41 @@ Ruff is configured in `pyproject.toml` or `ruff.toml` at the project root.
 ### results
 ## supplementary_materials
 * __testing_weber_model.py__: Various diagnostic functions for gHGF to test functioning and further development. Comment/uncomment as needed.
+
+
+## ✨ Code Quality with Ruff
+
+This project uses [Ruff](https://docs.astral.sh/ruff/) for linting and code formatting.
+
+### Installation
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+or directly via pip:
+
+```bash
+pip install ruff
+```
+
+### Usage
+
+**Linting:**
+```bash
+ruff check .
+```
+
+**Formatting:**
+```bash
+ruff format .
+```
+
+**Auto-fix issues:**
+```bash
+ruff check --fix .
+```
+
+### ⚙️ Configuration
+
+Ruff is configured in `pyproject.toml` or `ruff.toml` at the project root.
