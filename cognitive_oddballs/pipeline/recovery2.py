@@ -4,6 +4,7 @@ MLE-BIC vs Bayesian Inference (Laplace Approximation)
 
 Based on Marković & Kiebel (2016)
 """
+#no special libraries needed as in recovery-optimized.py
 
 # Imports
 from collections.abc import Callable
@@ -636,14 +637,13 @@ def fast_sanity_check():
         "randomwalk": generate_random_walk_environment,
     }
 
-    # Optional: skip Hessian for speed on first test
-    do_laplace = True
+    
 
     for env_name, env_fn in envs.items():
         print("\n" + "=" * 60)
         print(f"SANITY CHECK ENV: {env_name} | n_trials={n_trials} | sigma_r={sigma_r}")
 
-        # Generate one dataset once (shared across generator models for speed)
+        # generate one dataset once (shared across models for speed)
         env_out = env_fn(n_trials=n_trials, sigma=25, seed=0)
         observations = get_observations(env_out)
 
@@ -664,28 +664,22 @@ def fast_sanity_check():
                 k = model_n_params(fit_model_cls)
                 bic = calculate_bic(k, n_trials, best_ll)
 
-                msg = (
-                    f"fit={fit_name:3s} | ll={best_ll: .2f} | bic={bic: .2f} | params={best_params}"
-                )
-                if not do_laplace:
-                    print(msg)
-                    continue
-
-                # MAP + Laplace (optional)
+                # MAP + Laplace (always computed)
                 map_params, logpost = grid_search_map(
                     fit_model_cls, param_grids[fit_name], observations, responses, sigma_r
                 )
                 hessian = estimate_hessian(
-                    fit_model_cls,
-                    np.asarray(map_params),
-                    observations,
-                    responses,
-                    sigma_r,
-                    eps=1e-4,
+                    fit_model_cls, np.asarray(map_params), observations, responses, sigma_r
                 )
                 log_evidence = laplace_model_evidence(logpost, hessian, k)
-                print(msg + f" | logev={log_evidence: .2f}")
 
+                # ---------------------------------------------------------
+                # print BOTH scores together
+                # ---------------------------------------------------------
+                print(
+                    f"fit={fit_name:3s} | ll={best_ll: .2f} | BIC={bic: .2f} | "
+                    f"params={best_params} | logEvidence={log_evidence: .2f}"
+                )
     print("\nSanity check finished.")
 
 
@@ -696,7 +690,6 @@ if __name__ == "__main__":
     fast_sanity_check()
 
 
-# ONE-SHOT MODEL RECOVERY SCRIPT (PRINT-ONLY)
 
 
 def true_param_sampler(model_name: str):
@@ -715,8 +708,7 @@ def true_param_sampler(model_name: str):
     raise KeyError(model_name)
 
 
-# In recovery2.py
-# REPLACE the entire function with this one:
+
 
 def run_many_simulations(
     n_sims,
@@ -751,189 +743,211 @@ def run_many_simulations(
         for true_m in model_names:
             scores = {}
             for fit_m in model_names:
-                if decision_rule == "BIC":
-                    scores[fit_m] = results_per_env[true_m][fit_m]["MLE"]["BIC"]
-                else:  # 'LogEvidence'
-                    scores[fit_m] = results_per_env[true_m][fit_m]["Bayesian"]["log_evidence"]
+                scores[fit_m] = {
+                    "BIC": results_per_env[true_m][fit_m]["MLE"]["BIC"],
+                    # Laplace log‑evidence (always computed)
+                    "LogEvidence": results_per_env[true_m][fit_m]["Bayesian"]["log_evidence"],
+                }
+            # decide winners for *each* criterion separately
+            winner_bic = min(
+                scores, key=lambda k: scores[k]["BIC"]
+            )  # lowest BIC
+            winner_logevi = max(
+                scores, key=lambda k: scores[k]["LogEvidence"]
+            )  # highest evidence
 
-            winner = (
-                min(scores, key=scores.get)
-                if decision_rule == "BIC"
-                else max(scores, key=scores.get)
-            )
+            # store the MAP/MLE parameters for each winner
+            recovered_params_bic = results_per_env[true_m][winner_bic]["MLE"]["best_params"]
+            recovered_params_logevi = results_per_env[true_m][winner_logevi]["Bayesian"]["MAP"]
+            # -----------------------------------------------------------------
+            # 4) record the full result – no filtering
+            simulation_results.append(
+                {
+                    "sim_id": sim,
+                    "true_model": true_m,
+                    # winners for the two criteria
+                    "winner_BIC": winner_bic,
+                    "winner_LogEvidence": winner_logevi,
+                    # recovered parameter vectors (MLE for BIC, MAP for evidence)
+                    "recovered_BIC": recovered_params_bic,
+                    "recovered_LogEvidence": recovered_params_logevi,
+                    # full scores (both numbers) – useful for later analysis
+                    "scores": scores,
+                    # the true parameters (kept for later correlation plots)
+                    "true_params": true_params[true_m],
+                })
 
-            if winner in results_per_env[true_m]:
-                recovered_params = (
-                    results_per_env[true_m][winner]["MLE"]["best_params"]
-                    if decision_rule == "BIC"
-                    else results_per_env[true_m][winner]["Bayesian"]["MAP"]
-                )
-            else:
-                recovered_params = None
-
-            simulation_results.append({
-                "sim_id": sim,
-                "true_model": true_m,
-                "winner": winner,
-                "true_params": true_params[true_m],
-                "recovered_params": recovered_params,
-                "scores": scores,
-            })
             
    
     return simulation_results
 
 
-def print_confusion_matrix(winners):
-    models = list(winners.keys())
-    print("\nCONFUSION MATRIX (rows=true, cols=recovered)")
-    print(" " * 12 + " ".join(f"{m:>8s}" for m in models))
 
-    for true_m in models:
-        row = winners[true_m]
-        total = sum(row.values())
-        props = [row[m] / max(total, 1) for m in models]
-        print(f"{true_m:>10s} | " + " ".join(f"{p:8.2f}" for p in props))
-
-
-def print_param_recovery_stats(param_recovery):
-    print("\nPARAMETER RECOVERY (only correctly identified fits)")
-
-    for model, pairs in param_recovery.items():
-        if len(pairs) == 0:
-            print(f"{model}: no correctly recovered simulations")
-            continue
-
-        true_p = np.vstack([p[0] for p in pairs])
-        rec_p = np.vstack([p[1] for p in pairs])
-
-        print(f"\n{model}:")
-        for i in range(true_p.shape[1]):
-            r = np.corrcoef(true_p[:, i], rec_p[:, i])[0, 1]
-            print(f"  param {i}: corr(true, recovered) = {r: .2f}")
-
-def plot_confusion_matrix(simulation_results, model_names):
+# -----------------------------------------------------------------
+#  1️.  CONFUSION MATRICES (one for each criterion)
+# -----------------------------------------------------------------
+def plot_two_confusion_matrices(simulation_results, model_names):
     """
-    Creates a graphical confusion matrix from simulation results.
-    Rows = True Model, Columns = Recovered Model.
+    Build two side‑by‑side heat‑maps:
+      • left  – confusion matrix for the winner selected by BIC,
+      • right – confusion matrix for the winner selected by Log‑Evidence.
+    The matrices are normalised row‑wise (proportions of each true model).
     """
+    # --- build count matrices -------------------------------------------------
     n_models = len(model_names)
-    conf_matrix = pd.DataFrame(np.zeros((n_models, n_models)), index=model_names, columns=model_names)
+    conf_bic = pd.DataFrame(np.zeros((n_models, n_models)), index=model_names, columns=model_names)
+    conf_logevi = pd.DataFrame(np.zeros((n_models, n_models)), index=model_names, columns=model_names)
 
-    for result in simulation_results:
-        true_model = result["true_model"]
-        winner = result["winner"]
-        conf_matrix.loc[true_model, winner] += 1
-        
-    # Convert counts to proportions
-    conf_matrix_prop = conf_matrix.div(conf_matrix.sum(axis=1), axis=0)
+    for res in simulation_results:
+        true_m = res["true_model"]
+        # BIC winner
+        conf_bic.loc[true_m, res["winner_BIC"]] += 1
+        # Log‑Evidence winner
+        conf_logevi.loc[true_m, res["winner_LogEvidence"]] += 1
 
-    plt.figure(figsize=(8, 6))
-    sns.heatmap(
-        conf_matrix_prop,
-        annot=True,
-        fmt=".2f",
-        cmap="Blues",
-        linewidths=.5,
-        cbar=True,
-    )
-    plt.title("Model Recovery Confusion Matrix (Proportions)", fontsize=16)
-    plt.xlabel("Recovered Model", fontsize=12)
-    plt.ylabel("True Model", fontsize=12)
+    # --- convert to proportions ------------------------------------------------
+    conf_bic = conf_bic.div(conf_bic.sum(axis=1), axis=0).fillna(0)
+    conf_logevi = conf_logevi.div(conf_logevi.sum(axis=1), axis=0).fillna(0)
+
+    # --- plot in a single figure ----------------------------------------------
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    sns.heatmap(conf_bic, annot=True, fmt=".2f", cmap="Blues", linewidths=.5,
+                ax=axes[0], cbar=False)
+    axes[0].set_title("Confusion (BIC winner)", fontsize=14)
+    axes[0].set_xlabel("Recovered model", fontsize=12)
+    axes[0].set_ylabel("True model", fontsize=12)
+
+    sns.heatmap(conf_logevi, annot=True, fmt=".2f", cmap="Oranges", linewidths=.5,
+                ax=axes[1], cbar=False)
+    axes[1].set_title("Confusion (Log‑Evidence winner)", fontsize=14)
+    axes[1].set_xlabel("Recovered model", fontsize=12)
+    axes[1].set_ylabel("")  # shared y‑label already on left
+
+    plt.tight_layout()
     plt.show()
 
+
+# -----------------------------------------------------------------
+#  2️.  SCORE DISTRIBUTIONS (BIC vs. Log‑Evidence)
+# -----------------------------------------------------------------
+def plot_score_distributions(simulation_results, model_names):
+    """
+    Violin plot that shows, for each *true* model, the distribution of the
+    raw BIC values (lower = better) and the raw Log‑Evidence values
+    (higher = better) obtained for every fitted model.
+    """
+    # --- build a tidy DataFrame ------------------------------------------------
+    rows = []
+    for res in simulation_results:
+        true_m = res["true_model"]
+        for fit_m in model_names:
+            rows.append({
+                "TrueModel": true_m,
+                "FitModel": fit_m,
+                "Criterion": "BIC",
+                "Score": res["scores"][fit_m]["BIC"]
+            })
+            rows.append({
+                "TrueModel": true_m,
+                "FitModel": fit_m,
+                "Criterion": "LogEvidence",
+                "Score": res["scores"][fit_m]["LogEvidence"]
+            })
+    df = pd.DataFrame(rows)
+
+    # --- plot ---------------------------------------------------------------
+    plt.figure(figsize=(10, 6))
+    sns.violinplot(data=df, x="TrueModel", y="Score",
+                   hue="Criterion", split=True, inner="quartile",
+                   palette={"BIC": "lightblue", "LogEvidence": "lightcoral"},
+                   cut=0)
+    plt.title("Score distributions per true model", fontsize=16)
+    plt.xlabel("True generative model", fontsize=12)
+    plt.ylabel("Score (BIC ↓ , Log‑Evidence ↑)", fontsize=12)
+    plt.legend(title="Criterion")
+    plt.grid(True, axis="y", alpha=0.3)
+    plt.show()
+
+
+# -----------------------------------------------------------------
+#  3️.  PARAMETER RECOVERY (both MLE‑based & MAP‑based on same axes)
+# -----------------------------------------------------------------
 def plot_parameter_recovery(simulation_results, param_names_dict):
     """
-    Creates scatter plots for true vs. recovered parameters for correctly
-    identified models.
-    
-    param_names_dict: e.g., {"CPM": ["w1", "w2", "h"], "HGF": ["eta", "s"]}
+    Scatter plots of *true* vs. *recovered* parameters.
+    For each model we plot two series on the same axes:
+      • recovered by the BIC‑winner (MLE, blue circles)
+      • recovered by the Log‑Evidence‑winner (MAP, orange triangles)
     """
-    correct_fits = [res for res in simulation_results if res["true_model"] == res["winner"]]
-    
-    if not correct_fits:
-        print("No simulations resulted in correct model recovery. Skipping parameter recovery plots.")
-        return
-
-    df = pd.DataFrame(correct_fits)
+    # --- keep *all* simulations (both correctly and incorrectly identified) ---
+    df = pd.DataFrame(simulation_results)
 
     for model_name, param_names in param_names_dict.items():
-        model_df = df[df["true_model"] == model_name]
-        if model_df.empty:
-            continue
+        # select rows belonging to this true model
+        sub = df[df["true_model"] == model_name]
+
+        # true parameter matrix (N × d)
+        true_mat = np.vstack(sub["true_params"].values)
+
+        # recovered matrices
+        rec_bic_mat = np.vstack(sub["recovered_BIC"].values)
+        rec_logevi_mat = np.vstack(sub["recovered_LogEvidence"].values)
 
         n_params = len(param_names)
         fig, axes = plt.subplots(1, n_params, figsize=(5 * n_params, 5), squeeze=False)
-        fig.suptitle(f"Parameter Recovery for {model_name} (n={len(model_df)})", fontsize=16)
 
-        true_params = np.vstack(model_df["true_params"].values)
-        rec_params = np.vstack(model_df["recovered_params"].values)
-
-        for i, param_name in enumerate(param_names):
+        for i, pname in enumerate(param_names):
             ax = axes[0, i]
-            x = true_params[:, i]
-            y = rec_params[:, i]
-            
-            ax.scatter(x, y, alpha=0.6, edgecolors='k')
-            
-            # Add identity line
+
+            # true vs. BIC‑recovered (MLE)
+            ax.scatter(true_mat[:, i], rec_bic_mat[:, i],
+                       alpha=0.6, edgecolor="k", facecolor="steelblue",
+                       label="BIC (MLE)", marker="o")
+
+            # true vs. LogEvidence‑recovered (MAP)
+            ax.scatter(true_mat[:, i], rec_logevi_mat[:, i],
+                       alpha=0.6, edgecolor="k", facecolor="darkorange",
+                       label="LogEvidence (MAP)", marker="^")
+
+            # identity line
             lim_min = min(ax.get_xlim()[0], ax.get_ylim()[0])
             lim_max = max(ax.get_xlim()[1], ax.get_ylim()[1])
-            ax.plot([lim_min, lim_max], [lim_min, lim_max], 'r--', label="Identity")
-            
-            ax.set_xlabel(f"True {param_name}", fontsize=12)
-            ax.set_ylabel(f"Estimated {param_name}", fontsize=12)
-            
-            # Calculate and display correlation
-            corr = np.corrcoef(x, y)[0, 1]
-            ax.set_title(f"{param_name} (r = {corr:.2f})", fontsize=14)
-            ax.legend()
+            ax.plot([lim_min, lim_max], [lim_min, lim_max], "k--", linewidth=1)
+
+            ax.set_xlabel(f"True {pname}", fontsize=12)
+            ax.set_ylabel(f"Recovered {pname}", fontsize=12)
+            ax.set_title(f"{pname}", fontsize=13)
+            ax.legend(fontsize=10)
             ax.grid(True, alpha=0.3)
 
+        plt.suptitle(f"Parameter recovery for {model_name} (n={len(sub)})", fontsize=16)
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         plt.show()
 
-def plot_score_differences(simulation_results, model_names, decision_rule="BIC"):
-    """
-    Plots the distribution of the difference in model selection scores.
-    For BIC, shows BIC(CPM) - BIC(HGF). Negative values favor CPM.
-    For LogEvidence, shows LogEv(CPM) - LogEv(HGF). Positive values favor CPM.
-    """
-    if len(model_names) != 2:
-        print("Score difference plot is only supported for two models.")
-        return
-        
-    m1, m2 = model_names[0], model_names[1]
-    
-    plot_data = []
-    for res in simulation_results:
-        score_diff = res["scores"][m1] - res["scores"][m2]
-        plot_data.append({"true_model": res["true_model"], "score_diff": score_diff})
-        
-    df = pd.DataFrame(plot_data)
 
-    plt.figure(figsize=(8, 6))
-    sns.violinplot(data=df, x="true_model", y="score_diff", inner="quartile", cut=0)
-    
-    # Add a decision boundary line
-    plt.axhline(0, color='r', linestyle='--', label="Decision Boundary")
-    
-    ylabel = f"{m1} vs {m2} Score Difference"
-    if decision_rule == "BIC":
-        title = f"BIC Difference ({m1} - {m2}) | Negative favors {m1}"
-    else: # LogEvidence
-        title = f"Log Evidence Difference ({m1} - {m2}) | Positive favors {m1}"
-        
-    plt.title(title, fontsize=16)
-    plt.xlabel("True Generative Model", fontsize=12)
-    plt.ylabel(ylabel, fontsize=12)
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-    plt.show()
-# ============================================================
-# MAIN
-# ============================================================
+# -----------------------------------------------------------------
+#  4️.  OPTIONAL: ONE‑SHOT CONFUSION + SCORE SUMMARY (for quick sanity checks)
+# -----------------------------------------------------------------
+def plot_overall_summary(simulation_results, model_names):
+    """
+    Convenience wrapper that calls the three visualisers above.
+    Use it after the main experiment finishes:
+        plot_overall_summary(simulation_results, model_names)
+    """
+    plot_two_confusion_matrices(simulation_results, model_names)
+    plot_score_distributions(simulation_results, model_names)
 
+    # define the mapping from model name → parameter names (same as before)
+    param_names_dict = {
+        "CPM": ["w1_std", "w2_std", "h"],
+        "HGF": ["eta", "s"]
+    }
+    plot_parameter_recovery(simulation_results, param_names_dict)
+
+
+# -----------------------------------------------------------------
+#  5️.  Replace the old calls in the __main__ block
+# -----------------------------------------------------------------
 if __name__ == "__main__":
     set_seed(1)
 
@@ -942,16 +956,18 @@ if __name__ == "__main__":
         "HGF": PatchedHGF,
     }
 
-    # Define parameter names for plotting labels
+    # Parameter names for the scatter‑plots
     param_names_dict = {
         "CPM": ["w1_std", "w2_std", "h"],
         "HGF": ["eta", "s"]
     }
-    # ----- parameter grids -----
+
+    # ----- parameter grids -------------------------------------------------
     w1_grid = np.linspace(0.05, 0.5, 6)
     w2_grid = np.array([50.0, 200.0, 1000.0])
     h_grid = np.linspace(0.01, 0.3, 6)
-    cpm_grid = np.array([(w1, w2, h) for w1 in w1_grid for w2 in w2_grid for h in h_grid])
+    cpm_grid = np.array([(w1, w2, h) for w1 in w1_grid
+                         for w2 in w2_grid for h in h_grid])
 
     eta_grid = np.logspace(-4, -1, 8)
     s_grid = np.logspace(np.log10(1.0), np.log10(50.0**2), 8)
@@ -962,27 +978,22 @@ if __name__ == "__main__":
         "HGF": hgf_grid,
     }
 
-
+    # ----- run the simulations -------------------------------------------
     simulation_results = run_many_simulations(
-        n_sims=5,  
+        n_sims=50,
         models=models,
         true_param_sampler=true_param_sampler,
         param_grids=param_grids,
         environment_fn=generate_change_point_environment,
         n_trials=200,
         sigma_r=5.0,
-        decision_rule="BIC",
+        decision_rule="BIC",      # kept for compatibility; both scores are stored anyway
     )
 
     model_names = list(models.keys())
-    
-    # 1. Plot confusion matrix
-    plot_confusion_matrix(simulation_results, model_names)
-    
-    # 2. Plot parameter recovery
-    plot_parameter_recovery(simulation_results, param_names_dict)
-    
-    # 3. Plot score differences
-    plot_score_differences(simulation_results, model_names, decision_rule="BIC")
+
+    # ----- NEW unified visualisation ---------------------------------------
+    plot_overall_summary(simulation_results, model_names)
 
     print("\nModel recovery and plotting finished.")
+
