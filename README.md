@@ -75,7 +75,7 @@ To perform parameter and model recovery, please run:
 python -m cognitive_oddballs.pipeline.recovery_optimized
 ```
 
-The script runs a 2 x 2 x 2 x 2 design experiment and plots confusion matrices and summary statistics
+The script runs a 2 x 2 x 2 design experiment and plots confusion matrices and summary statistics
 * Two models: the Hierachical Gaussian Filter (Mathys 2011 version) and the Change-Point Model (Nassar et al. 2016 model
 with Variational Inference version a la Markovic & Kiebel 2016)
 * Two environments: an random-walk environment with oddballs and a change-point environment with oddballs
